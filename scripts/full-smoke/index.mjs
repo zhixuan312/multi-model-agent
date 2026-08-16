@@ -213,6 +213,12 @@ async function runScenario(spec, ctx, log) {
     if (spec.id === 4) {
       const cb = envelope.output?.contextBlockId;
       if (cb) ctx.auditContextBlockId = cb;
+      // Retain round 1's finding CLAIMS so the delta round can be checked on the property the
+      // feature actually promises — that round 2 does not re-report what round 1 already said.
+      // Counting round-2 findings cannot distinguish "correctly found nothing new" from "never
+      // received the block", which is why that check could only ever WARN.
+      const f = envelope.output?.summary?.findings;
+      ctx.auditRound1Claims = Array.isArray(f) ? f.map((x) => String(x?.claim ?? '').trim()).filter(Boolean) : [];
     }
 
     const queue = collectQueue(queueBefore);
@@ -232,6 +238,8 @@ async function runScenario(spec, ctx, log) {
     if (polling202) rec.polling202 = polling202;
     if (polling202Last) rec.polling202Last = polling202Last;
     if (res.admission) rec.admission = res.admission;
+    // The delta round needs round 1's claims to prove it did not simply re-report them.
+    if (spec.delta) rec.round1Claims = ctx.auditRound1Claims ?? [];
     if (spec.sessionReuse && ctx.sessionFromScenario2) {
       rec.resumeSessionId = ctx.sessionFromScenario2;
     }

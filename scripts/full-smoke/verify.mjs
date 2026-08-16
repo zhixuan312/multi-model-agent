@@ -867,8 +867,27 @@ export function verify(rec) {
     // is that round 2 STILL produces findings, so assert the shape hard and the intent as a warn.
     out.push(C('delta-mode', Array.isArray(findings) ? 'PASS' : 'FAIL',
       `delta round 2 returned ${Array.isArray(findings) ? `${findings.length} findings` : 'a non-array summary'}`));
-    out.push(C('delta-still-finds', findings.length > 0 ? 'PASS' : 'WARN',
-      `${findings.length} findings with the prior round injected as context`));
+
+    // The delta contract is "round 2 does not re-report round 1", NOT "round 2 finds more".
+    //
+    // The previous check was `findings.length > 0 ? PASS : WARN`, which could only ever be
+    // advisory: re-auditing an UNCHANGED file with round 1's findings injected, zero new findings
+    // is the CORRECT outcome, and the count cannot distinguish that from "the worker never
+    // received the block". An assertion that cannot tell success from failure has to warn, and a
+    // permanent warn is noise that trains everyone to ignore the line.
+    //
+    // What the feature actually promises is checkable: no round-1 claim comes back verbatim.
+    // Zero findings satisfies it (correctly), and a worker that ignored the context block and
+    // re-audited from scratch fails it.
+    const round1 = Array.isArray(rec.round1Claims) ? rec.round1Claims : [];
+    const norm = (t) => String(t ?? '').trim().toLowerCase();
+    const repeated = findings
+      .map((f) => norm(f?.claim))
+      .filter((c) => c && round1.some((r) => norm(r) === c));
+    out.push(C('delta-no-repeat', repeated.length === 0 ? 'PASS' : 'FAIL',
+      round1.length === 0
+        ? `round 1 supplied no claims to compare against; round 2 returned ${findings.length}`
+        : `${repeated.length} of ${findings.length} round-2 claims repeat one of round 1's ${round1.length}`));
   }
 
   // ⑰ Spec components — default spec emits all 8 (Forge-compat); a subset request must

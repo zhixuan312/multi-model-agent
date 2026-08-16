@@ -154,6 +154,23 @@ these formats EXACTLY, or the renderer mis-parses (collapses phases, drops the o
   Keep any declared check's `Check:` path a NEW dedicated destination — never the path named in
   `**Output:**`, which is the deliverable itself, not a check artifact.
 
+### Close the plan with a full-suite gate
+
+End the plan with a section headed exactly `## Full-suite gate`, listing the commands or checks that
+must pass at EVERY task boundary — the project's own build, typecheck, test and lint entry points as
+they actually exist in the target (do not invent commands; read the manifest or the existing docs and
+name the real ones).
+
+Per-task checks prove the task did its own job. They cannot prove the task left the rest of the
+project working, and that is the failure a plan executed task-by-task actually produces: each check
+green, the suite red. State the gate once, at the end, so an executor knows what must hold after
+every task rather than only after the last one.
+
+When the target genuinely has no suite to run — a document, a workflow configuration, a deliverable
+with no build — say so in that section in one line and name what stands in for it (a re-read, a
+schema validation, a human review). The section is never omitted; a plan that cannot state its gate
+has not decided how anyone will know it still works.
+
 ## Constraints
 
 1. **No implementation code and no final deliverable content in the plan.** A task's closing line is
