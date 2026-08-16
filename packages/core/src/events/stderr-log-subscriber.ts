@@ -13,6 +13,7 @@
 
 import type { Subscriber, BusMessage } from './envelope-bus.js';
 import type { PlainLogEntry } from './plain-log-entry.js';
+import { redactSecrets } from '../identity/secret-redactor.js';
 
 export class StderrLogSubscriber implements Subscriber {
   readonly name = 'stderr-log';
@@ -45,5 +46,16 @@ export function formatStderrLine(entry: PlainLogEntry): string {
       parts.push(`${snake}=${v}`);
     }
   }
-  return `[mma] ${parts.join(' ')}`;
+  // Redacted, like the JSONL sink.
+  //
+  // `redactSecrets` was applied ONLY in `log-writer.ts` — the sink that is OFF by default. This
+  // one is always on for `mma serve`, so the stream an operator actually sees, scrolls back
+  // through, captures in CI, and pastes into a bug report was the UNREDACTED one, while the
+  // opt-in file copy of the same event was clean. Provider events carry whole command lines
+  // (`codex_command_started`), error messages, and serialized tool inputs, so a token in any of
+  // them printed verbatim.
+  //
+  // Applied to the composed line rather than per field, matching what `LogWriter` does with the
+  // whole record: a secret is a secret wherever in the line it lands.
+  return redactSecrets(`[mma] ${parts.join(' ')}`) as string;
 }

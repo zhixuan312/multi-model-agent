@@ -3,10 +3,15 @@ import { TaskEnvelopeStore } from '../fixtures/task-envelope-store.js';
 import { toWireRecord } from '../../packages/core/src/events/to-wire-record.js';
 import { ValidatedTaskCompletedEventSchema } from '../../packages/core/src/events/wire-schema.js';
 
-// 4.7.4+ standardization: findingsOutcome / findingsOutcomeReason /
-// outcomeInferred / outcomeMalformed live ONLY at the top level of the wire
-// event. Per-stage rows do not carry these fields. The top-level value is
-// rolled up across stages with priority: review > annotating > implementing.
+// findingsOutcome / findingsOutcomeReason live ONLY at the top level of the
+// wire event; per-stage rows do not carry them. The top-level value is rolled
+// up across stages with priority: review > implementing.
+//
+// v7 dropped `outcomeInferred` / `outcomeMalformed` (nothing ever set them) and
+// added R17/R18, which tie the outcome to the findings list: `found` requires
+// findings and `clean` forbids them. That is why the fixtures below record a
+// finding alongside a `found` outcome — the two are one fact, and the schema
+// now refuses to carry a version where they disagree.
 
 const seed = {
   taskId: 't',
@@ -24,6 +29,10 @@ describe('toWireRecord — top-level findings-outcome rollup', () => {
   it('lifts implementing-stage outcome to top-level when no review stage ran', () => {
     const s = TaskEnvelopeStore.create(seed);
     s.startStage('implementing', { model: 'claude-sonnet-4-6', tier: 'standard' });
+    s.recordFinding({
+      id: 'f1', severity: 'high', category: 'security',
+      claim: 'token logged in plaintext', evidence: 'serve.ts:120', source: 'reviewer',
+    });
     s.completeStage('implementing', 1, {
       outcome: 'advance',
       durationMs: 1000,
@@ -33,29 +42,26 @@ describe('toWireRecord — top-level findings-outcome rollup', () => {
       outputTokens: 50,
       findingsOutcome: 'found',
       findingsOutcomeReason: '1 high-severity finding',
-      outcomeInferred: false,
-      outcomeMalformed: false,
     });
     s.seal({ status: 'done', stopReason: 'normal', realFilesChanged: [] });
     const wire = toWireRecord(s.snapshot(), {
       toolMode: 'full',
       implementerModel: 'claude-sonnet-4-6',
       implementerTier: 'standard',
-      mainModelFamily: 'claude',
+      mainModelFamily: 'claude' as const,
     });
 
     expect(() => ValidatedTaskCompletedEventSchema.parse(wire)).not.toThrow();
     // Top-level carries the outcome rollup
     expect(wire.findingsOutcome).toBe('found');
     expect(wire.findingsOutcomeReason).toBe('1 high-severity finding');
-    expect(wire.outcomeInferred).toBe(false);
-    expect(wire.outcomeMalformed).toBe(false);
+    // R17: the histogram and the count are two views of one list.
+    expect(wire.concernCount).toBe(1);
+    expect(wire.findingsBySeverity).toEqual({ critical: 0, high: 1, medium: 0, low: 0 });
     // Per-stage rows do NOT carry outcome fields anymore
     const implStage = wire.stages.find((st: any) => st.name === 'implementing') as any;
     expect(implStage.findingsOutcome).toBeUndefined();
     expect(implStage.findingsOutcomeReason).toBeUndefined();
-    expect(implStage.outcomeInferred).toBeUndefined();
-    expect(implStage.outcomeMalformed).toBeUndefined();
   });
 
   it('prefers review-stage outcome over implementing when both are present', () => {
@@ -76,20 +82,19 @@ describe('toWireRecord — top-level findings-outcome rollup', () => {
       verdict: 'approved',
       findingsOutcome: 'clean',
       findingsOutcomeReason: null,
-      outcomeInferred: false,
-      outcomeMalformed: false,
     });
     s.seal({ status: 'done', stopReason: 'normal', realFilesChanged: [] });
     const wire = toWireRecord(s.snapshot(), {
       toolMode: 'full',
       implementerModel: 'claude-sonnet-4-6',
       implementerTier: 'standard',
-      mainModelFamily: 'claude',
+      mainModelFamily: 'claude' as const,
     });
 
     expect(wire.findingsOutcome).toBe('clean');
     expect(wire.findingsOutcomeReason).toBeNull();
-    expect(wire.outcomeInferred).toBe(false);
+    // R18: `clean` is only legal with an empty findings list.
+    expect(wire.concernCount).toBe(0);
     // Review-stage row carries verdict but NOT outcome fields
     const reviewStage = wire.stages.find((st: any) => st.name === 'review') as any;
     expect(reviewStage.verdict).toBe('approved');
@@ -97,7 +102,14 @@ describe('toWireRecord — top-level findings-outcome rollup', () => {
     expect(reviewStage.findingsBySeverity).toBeUndefined();
   });
 
-  it('falls back to annotating when implementing has no outcome and no review ran', () => {
+  /**
+   * The rollup falls back to `implementing` when no review ran.
+   *
+   * This case drove an `annotating` stage, which nothing in production has produced since the
+   * lifecycle layer was removed — the priority list was `review → annotating → implementing` and
+   * the middle entry was unreachable. The fallback itself is real and is what this now asserts.
+   */
+  it('falls back to implementing when no review ran', () => {
     const s = TaskEnvelopeStore.create(seed);
     s.startStage('implementing', { model: 'claude-sonnet-4-6', tier: 'standard' });
     s.completeStage('implementing', 1, {
@@ -105,31 +117,22 @@ describe('toWireRecord — top-level findings-outcome rollup', () => {
       durationMs: 1000,
       inputTokens: 100,
       outputTokens: 50,
-    });
-    s.startStage('annotating', { model: 'claude-sonnet-4-6', tier: 'standard' });
-    s.completeStage('annotating', 1, {
-      outcome: 'advance',
-      durationMs: 100,
-      inputTokens: 20,
-      outputTokens: 10,
       findingsOutcome: 'not_applicable',
       findingsOutcomeReason: 'project-level question',
-      outcomeInferred: true,
-      outcomeMalformed: false,
     });
     s.seal({ status: 'done', stopReason: 'normal', realFilesChanged: [] });
     const wire = toWireRecord(s.snapshot(), {
       toolMode: 'full',
       implementerModel: 'claude-sonnet-4-6',
       implementerTier: 'standard',
-      mainModelFamily: 'claude',
+      mainModelFamily: 'claude' as const,
     });
 
     expect(wire.findingsOutcome).toBe('not_applicable');
     expect(wire.findingsOutcomeReason).toBe('project-level question');
-    expect(wire.outcomeInferred).toBe(true);
-    const annStage = wire.stages.find((st: any) => st.name === 'annotating') as any;
-    expect(annStage.findingsOutcome).toBeUndefined();
+    // Stage rows never carry the rollup fields — top-level only, since 4.7.4.
+    const implStage = wire.stages.find((st: { name: string }) => st.name === 'implementing') as { findingsOutcome?: unknown };
+    expect(implStage.findingsOutcome).toBeUndefined();
   });
 
   it('omits top-level outcome fields when no stage emitted one', () => {
@@ -146,13 +149,11 @@ describe('toWireRecord — top-level findings-outcome rollup', () => {
       toolMode: 'full',
       implementerModel: 'claude-sonnet-4-6',
       implementerTier: 'standard',
-      mainModelFamily: 'claude',
+      mainModelFamily: 'claude' as const,
     });
 
     expect(() => ValidatedTaskCompletedEventSchema.parse(wire)).not.toThrow();
     expect(wire.findingsOutcome).toBeUndefined();
     expect(wire.findingsOutcomeReason).toBeUndefined();
-    expect(wire.outcomeInferred).toBeUndefined();
-    expect(wire.outcomeMalformed).toBeUndefined();
   });
 });

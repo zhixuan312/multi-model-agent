@@ -3,10 +3,15 @@ import { boot } from '../fixtures/harness.js';
 import { mockProvider } from '../fixtures/mock-providers.js';
 import { normalize } from '../serializer/index.js';
 import okGolden from '../goldens/endpoints/register-context-block-ok.json' with { type: 'json' };
-import invalidGolden from '../goldens/endpoints/register-context-block-invalid.json' with { type: 'json' };
+// The SAME golden the errors family uses. `goldens/endpoints/register-context-block-invalid.json`
+// held a byte-identical copy: two files encoding one response to one request, which is one edit away
+// from two files claiming different truths about it. This endpoint returns the standard
+// `invalid_request` envelope and nothing endpoint-specific, so pointing at the canonical envelope
+// golden is not just deduplication — it is the accurate statement of the contract.
+import invalidGolden from '../goldens/errors/invalid-request.json' with { type: 'json' };
 
 describe('contract: POST /context-blocks', () => {
-  it('valid body returns 200 with golden shape', async () => {
+  it('valid body returns 201 with golden shape', async () => {
     const h = await boot({ provider: mockProvider({ stage: 'ok' }), cwd: process.cwd() });
     try {
       const res = await fetch(

@@ -22,7 +22,7 @@ export function readToken() {
 export async function dispatch(token, type, body, cwd) {
   const url = type === 'context-blocks'
     ? `${BASE_URL}/context-blocks?cwd=${encodeURIComponent(cwd)}`
-    : `${BASE_URL}/task?cwd=${encodeURIComponent(cwd)}`;
+    : `${BASE_URL}/execution?cwd=${encodeURIComponent(cwd)}`;
   const payload = type === 'context-blocks' ? body : { type, ...body };
   const res = await fetch(url,
     { method: 'POST', headers: HEADERS(token), body: JSON.stringify(payload) });
@@ -31,15 +31,15 @@ export async function dispatch(token, type, body, cwd) {
 }
 
 export async function getTask(token, taskId) {
-  const res = await fetch(`${BASE_URL}/task/${taskId}`, { headers: HEADERS(token) });
+  const res = await fetch(`${BASE_URL}/execution/${taskId}`, { headers: HEADERS(token) });
   const ct = res.headers.get('content-type') || '';
   return { status: res.status, body: ct.includes('json') ? await res.json() : await res.text() };
 }
 
-/** DELETE /task/:id — request cooperative cancellation. 202 = requested (the task
+/** DELETE /execution/:id — request cooperative cancellation. 202 = requested (the task
  *  keeps running until the runner confirms), 200 = already terminal. */
 export async function cancelTask(token, taskId) {
-  const res = await fetch(`${BASE_URL}/task/${taskId}`, { method: 'DELETE', headers: HEADERS(token) });
+  const res = await fetch(`${BASE_URL}/execution/${taskId}`, { method: 'DELETE', headers: HEADERS(token) });
   const ct = res.headers.get('content-type') || '';
   return { status: res.status, body: ct.includes('json') ? await res.json() : await res.text() };
 }

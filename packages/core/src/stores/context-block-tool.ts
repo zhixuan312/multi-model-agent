@@ -1,15 +1,17 @@
-import { createHash, randomUUID } from 'node:crypto';
+import { randomUUID } from 'node:crypto';
 
 /**
- * Metadata describing a successful `register(...)` call. The orchestrator
- * and MCP tool surfaces return this to the caller so they can reference
- * the stored block later (by id) and independently verify its content
- * (via sha256).
+ * The handle a successful `register(...)` returns: the id a later dispatch references.
+ *
+ * It used to also carry `lengthChars` and a `sha256`, described here as letting a caller
+ * "independently verify its content" — a capability no caller ever had. Both surfaces that
+ * register a block (`POST /context-blocks` and the MCP tool) read `.id` and nothing else, so the
+ * hash was computed on every registration and discarded. That is not free: the terminal block for
+ * every read-route execution is the reviewer's raw output, and this file's own warning threshold
+ * anticipates content over 10 MiB, which costs ~12ms to hash for no reader.
  */
 export interface RegisteredBlock {
   id: string;
-  lengthChars: number;
-  sha256: string;
 }
 
 /**
@@ -21,12 +23,15 @@ export interface RegisteredBlock {
  * and prepends the content to the worker payload.
  */
 export interface ContextBlockStore {
-  /** Store `content` under an explicit id (idempotent replace) or a new
-   *  UUID. Returns the id, length, and sha256 hash. */
+  /** Store `content` under an explicit id (idempotent replace) or a new UUID. Returns the id. */
   register(content: string, opts?: { id?: string; ttlMs?: number }): RegisteredBlock;
   /** Fetch content by id. Returns `undefined` if the id is unknown or
    *  the entry has expired. Touches the LRU access time on success. */
   get(id: string): string | undefined;
+  /** Does a live (unexpired) entry exist? Unlike `get`, this does NOT refresh the
+   *  entry's TTL or its LRU position — for callers asking about existence rather
+   *  than wanting the content. */
+  has(id: string): boolean;
   /** Delete an entry. Returns `true` if the entry existed. */
   delete(id: string): boolean;
   /** Number of entries. Used by status + size-cap checks. */
@@ -81,7 +86,8 @@ export interface InMemoryContextBlockStoreOptions {
  * Both bounds are intentional: the TTL prevents stale briefs from lingering
  * after a long-running session; the LRU cap prevents memory growth from a
  * chatty caller that never explicitly deletes anything. The eviction loop
- * is O(n) per insertion but `n <= maxEntries` (defaults to 100), so we
+ * is O(n) per insertion but `n <= maxEntries` (defaults to 500, matching
+ * `server.limits.maxContextBlocksPerProject`), so we
  * keep the implementation simple.
  *
  * `Date.now()` is read directly (not through a clock abstraction) so tests
@@ -111,11 +117,7 @@ export class InMemoryContextBlockStore implements ContextBlockStore {
     const entryTtl = opts.ttlMs ?? this._ttlMs;
     this.entries.set(id, { content, addedAtMs: now, ttlMs: entryTtl, lastAccessTick: ++this.tick, pinCount: 0 });
     this.evictIfOverBound();
-    return {
-      id,
-      lengthChars: content.length,
-      sha256: createHash('sha256').update(content).digest('hex'),
-    };
+    return { id };
   }
 
   get(id: string): string | undefined {
@@ -131,6 +133,29 @@ export class InMemoryContextBlockStore implements ContextBlockStore {
     entry.addedAtMs = now;
     entry.lastAccessTick = ++this.tick;
     return entry.content;
+  }
+
+  /**
+   * Existence without the side effects of `get`.
+   *
+   * `get` deliberately refreshes an entry's TTL and LRU position, which is right for a caller that
+   * wants the content — and wrong for one merely asking whether the id is live. The delete handler
+   * used `get` for its existence check, so a DELETE rejected as `pinned` extended the life of the
+   * block it had just failed to remove and made it the newest entry in LRU order, i.e. the LAST
+   * thing evicted under the per-project cap. A caller polling for a pin to clear kept the block
+   * alive by asking about it.
+   *
+   * An expired entry is dropped here as it is in `get` — reporting it as present would be a lie
+   * with a different expiry rule than the rest of the store.
+   */
+  has(id: string): boolean {
+    const entry = this.entries.get(id);
+    if (!entry) return false;
+    if (Date.now() - entry.addedAtMs > entry.ttlMs) {
+      this.entries.delete(id);
+      return false;
+    }
+    return true;
   }
 
   delete(id: string): boolean {
@@ -161,7 +186,31 @@ export class InMemoryContextBlockStore implements ContextBlockStore {
     return this._ttlMs;
   }
 
+  /**
+   * Live entries only.
+   *
+   * Expiry in this store is LAZY — an entry is dropped when `get` or `has` touches it and finds it
+   * stale. Nothing sweeps in the background, so a block nobody asks about again stays in the Map
+   * forever after it expires. `size` reported those corpses, and three separate decisions are made
+   * from `size`:
+   *
+   *   - `ProjectRegistry.evictIdleLRU` refuses to evict a project whose store is non-empty, because
+   *     a caller may still reference its blocks by id. With dead blocks counted, a project that
+   *     registered one block and was never touched again became permanently un-evictable — and once
+   *     `cap` distinct cwds had each left one behind, `reserveProject` returned `project_cap` for
+   *     good. That is exactly the "permanent lockout" that method's comment says it exists to
+   *     prevent.
+   *   - `POST /context-blocks` returns 409 `cap_exhausted` at `size >= maxContextBlocksPerProject`,
+   *     so a project could be locked out by 500 blocks that `get` would all refuse to return.
+   *   - `GET /status` reports `contextBlockCount` per project, which was counting unreachable ones.
+   *
+   * Sweeping here is O(n) with n bounded by `maxEntries` (500 by default), and `size` is read on cap
+   * checks and status, not per request on a hot path. A getter that mutates is unusual, but it is
+   * the same lazy-expiry contract `get` and `has` already implement — reporting an entry that every
+   * read path would refuse to hand back is the anomaly, not dropping it.
+   */
   get size(): number {
+    this.sweepExpired();
     return this.entries.size;
   }
 
@@ -169,7 +218,18 @@ export class InMemoryContextBlockStore implements ContextBlockStore {
     this.entries.clear();
   }
 
+  /** Drop every entry past its TTL. The lazy expiry `get`/`has` do one id at a time. */
+  private sweepExpired(): void {
+    const now = Date.now();
+    for (const [id, entry] of this.entries) {
+      if (now - entry.addedAtMs > entry.ttlMs) this.entries.delete(id);
+    }
+  }
+
   private evictIfOverBound(): void {
+    // Reclaim dead entries before evicting live ones: without this, a store full of expired blocks
+    // would push out the entry just registered to stay under a bound the corpses were filling.
+    this.sweepExpired();
     while (this.entries.size > this.maxEntries) {
       let oldestId: string | undefined;
       let oldestTick = Infinity;

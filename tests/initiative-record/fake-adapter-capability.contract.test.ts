@@ -81,7 +81,11 @@ function isTargetSpecificControlOrLookup(value: ts.Node): boolean {
   for (let node: ts.Node = value; node.parent; node = node.parent) {
     const parent = node.parent;
     if (
-      (ts.isIfStatement(parent) || ts.isConditionalExpression(parent)) &&
+      ts.isIfStatement(parent) &&
+      value.pos >= parent.expression.pos && value.end <= parent.expression.end
+    ) return true;
+    if (
+      ts.isConditionalExpression(parent) &&
       value.pos >= parent.condition.pos && value.end <= parent.condition.end
     ) return true;
     if (ts.isCaseClause(parent)) return true;
@@ -91,7 +95,7 @@ function isTargetSpecificControlOrLookup(value: ts.Node): boolean {
     ) return true;
     if (ts.isElementAccessExpression(parent) && parent.argumentExpression === node) return true;
     if (ts.isPropertyAssignment(parent) && parent.name === node) return true;
-    if (ts.isCallExpression(parent) && parent.arguments.includes(node)) {
+    if (ts.isCallExpression(parent) && parent.arguments.some((arg) => arg === node)) {
       const name = ts.isPropertyAccessExpression(parent.expression) ? parent.expression.name.text : undefined;
       if (name === 'get' || name === 'has' || name === 'includes' || name === 'set') return true;
     }

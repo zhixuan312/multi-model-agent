@@ -19,8 +19,8 @@ import { createHash, randomUUID } from 'node:crypto';
 import * as path from 'node:path';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
-import type { MultiModelConfig, ServerConfig } from '@zhixuan92/multi-model-agent-core';
-import { assertRunnable, collectInlineApiKeyOffenders, loadAuthToken, PortInUseError } from '@zhixuan92/multi-model-agent-core';
+import type { MultiModelConfig } from '@zhixuan92/multi-model-agent-core';
+import { assertRunnable, collectInlineApiKeyOffenders, loadAuthToken, PortInUseError, isLoopbackAddress } from '@zhixuan92/multi-model-agent-core';
 import { startServer, SERVER_VERSION } from '../http/server.js';
 import { setDraining } from '../http/request-pipeline.js';
 import { expandHome } from '../expand-home.js';
@@ -197,7 +197,7 @@ export async function startServe(
   // (and /health) would ever read it.
   try {
     const { buildProvisioningService } = await import('../provisioning/runtime-deps.js');
-    const service = buildProvisioningService(config as unknown as ServerConfig);
+    const service = buildProvisioningService(config);
     const records = await service.inventory();
     const drift = records.filter((record) => record.status === 'failed');
     if (drift.length > 0) {
@@ -310,7 +310,7 @@ export async function startServe(
   // is the consent flag (MMA_TELEMETRY=0 / config.telemetry.enabled =
   // false) — when consent is off the recorder enqueues nothing, so the
   // flusher's tick is a no-op even with the default endpoint set.
-  const DEFAULT_TELEMETRY_ENDPOINT = 'https://mma-telemetry-frontend.x1.lucazhang.work/v1/events';
+  const DEFAULT_TELEMETRY_ENDPOINT = 'https://mma-telemetry.x1.lucazhang.work/v1/events';
   const envEndpoint = process.env.MMA_TELEMETRY_ENDPOINT;
   const telemetryEndpoint = envEndpoint === undefined
     ? DEFAULT_TELEMETRY_ENDPOINT
@@ -392,6 +392,23 @@ export async function startServe(
   // Print the actual bound address so operators see what the kernel assigned
   // (useful when port=0 selects an ephemeral port).
   const host = running.serverAddress ?? config.server.bind;
+
+  // Announce a non-loopback bind, once, in the operator's own terminal.
+  //
+  // `server.bind` is a free string defaulting to 127.0.0.1, and the routes that run a tool-using
+  // agent in a caller-supplied cwd are protected by the bearer token, not by an address check —
+  // only `/health`, which is deliberately auth-exempt, carries the IP guard. That is a coherent
+  // trade and this does not change it: a deployment that reaches the daemon from another container
+  // still works. What was missing is that widening the bind is a security-relevant change that
+  // happened in silence, so an operator could expose execution routes to their network without
+  // anything ever saying so.
+  if (!isLoopbackAddress(config.server.bind)) {
+    stderr(
+      `[mma] WARNING bind=${config.server.bind} is not loopback — /execution, /mcp and /initiatives ` +
+        `are reachable from the network, protected only by the bearer token. Use 127.0.0.1 unless ` +
+        `you intend that.\n`,
+    );
+  }
 
   // bootId discriminates successive startups that reuse a pid. Generated here
   // rather than inside the startup-line try block because the pidfile records

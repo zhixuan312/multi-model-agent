@@ -1,14 +1,24 @@
 // packages/core/src/events/plain-log-entry.ts
 import { z } from 'zod';
 
+/**
+ * The kinds the engine emits — every one of them, and nothing else.
+ *
+ * This list held thirteen names for a long time, and eight of them had no emitter anywhere:
+ * `server_started`, `server_stopped`, `request_received`, `request_spilled`, `project_evicted`,
+ * `stall_watchdog_armed`, `stall_watchdog_fired`, `server_error`. Two things kept them alive.
+ * The manifest golden listed all thirteen, and the tests that "covered" the list asserted its
+ * LENGTH — a count passes just as happily over eight names nothing produces. And the
+ * observability contract test emitted `request_received` and `stall_watchdog_armed` itself,
+ * then checked the entries it had just built were valid, which made the dead names look used.
+ *
+ * `plain-log-emitter-reachability.test.ts` now requires every name here to appear as an emitted
+ * literal in production source, so a kind cannot outlive the code that emitted it again.
+ */
 export const PlainLogKindEnum = z.enum([
-  'server_started','server_stopped',
-  'batch_created','request_received','request_spilled',
+  'batch_created',
   'batch_completed','batch_failed','batch_cancelled',
-  'project_evicted',
-  'stall_watchdog_armed','stall_watchdog_fired',
   'provider_event',
-  'server_error',
 ]);
 
 const FieldValue = z.union([z.string(), z.number(), z.boolean(), z.null()]);

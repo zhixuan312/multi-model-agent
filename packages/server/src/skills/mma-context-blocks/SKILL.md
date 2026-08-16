@@ -39,16 +39,16 @@ Two MCP tools, both scoped to `cwd`. If neither is available in this session, ru
 | Field | Type | Required | Notes |
 |---|---|---|---|
 | `cwd` | string | yes | Absolute path of the project that will own this block |
-| `content` | string | yes | Document content (min 1 char, max 50 MiB) |
+| `content` | string | yes | Document content (min 1 char, max **512 KiB** — `server.limits.maxContextBlockBytes`, measured in BYTES not characters) |
 | `ttlMs` | number | no | Time-to-live in ms; omit for idle-expiry (default 24 h idle). A block that is not referenced by any active task for 24 h is eligible for eviction. |
 
-Returns `{ "id": "cb_abc123" }`. Use this `id` as a `contextBlockIds` entry in any `mma-*` skill
+Returns `{ "id": "3f2b1c8e-9a41-4d77-b0e2-5c6d8f9a1b23" }`. Use this `id` as a `contextBlockIds` entry in any `mma-*` skill
 that supports it.
 
 ### Delete a context block — `mma_context_block_delete`
 
 ```json
-{ "cwd": "/project", "blockId": "cb_abc123" }
+{ "cwd": "/project", "blockId": "3f2b1c8e-9a41-4d77-b0e2-5c6d8f9a1b23" }
 ```
 
 Succeeds silently, or fails with `pinned` if the block is held by one or more active tasks (wait
@@ -59,10 +59,10 @@ for those tasks to complete before deleting) or `not_found` for an unknown id.
 ```json
 // Register the spec document once
 mma_context_block_create({ "cwd": "/project", "content": "<contents of /project/.mma/specs/2026-07-11-feature-design.md>" })
-// -> { "id": "cb_abc123" }
+// -> { "id": "3f2b1c8e-9a41-4d77-b0e2-5c6d8f9a1b23" }
 
 // Reference it from a delegate call
-mma_run({ "cwd": "/project", "request": { "type": "delegate", "prompt": "Implement section 3 per spec", "contextBlockIds": ["cb_abc123"] } })
+mma_run({ "cwd": "/project", "request": { "type": "delegate", "prompt": "Implement section 3 per spec", "contextBlockIds": ["3f2b1c8e-9a41-4d77-b0e2-5c6d8f9a1b23"] } })
 ```
 
 ## Best practices
@@ -80,10 +80,10 @@ Anti-pattern alert: **`re-inlined-shared-content`** (AP3). Pasting the same spec
 ❌ **Inlining the same 50KB spec into every task prompt**
 Inlining a 50KB spec into every delegate call's prompt.
 
-N×50KB transmissions; main context burns through tokens. **Fix:** register the spec once, pass `contextBlockIds: ["cb_xxx"]` to each call.
+N×50KB transmissions; main context burns through tokens. **Fix:** register the spec once, pass `contextBlockIds: ["3f2b1c8e-9a41-4d77-b0e2-5c6d8f9a1b23"]` to each call.
 
 ❌ **Forgetting to delete unused blocks**
-Blocks count against the project's context-block quota (`maxEntries` 500). **Fix:** explicitly call `mma_context_block_delete` after the dependent tasks finish — or let idle expiry (24 h) evict them.
+Blocks count against the project's context-block quota (`server.limits.maxContextBlocksPerProject` 500). **Fix:** explicitly call `mma_context_block_delete` after the dependent tasks finish — or let idle expiry (24 h) evict them.
 
 ❌ **Trying to update a block's content**
 Blocks are immutable. **Fix:** register a new block with the new content; switch the `contextBlockIds` to the new ID.

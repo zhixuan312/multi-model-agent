@@ -1,10 +1,10 @@
 // tests/server/handlers/control/context-blocks.test.ts
-import { describe, it, expect } from 'vitest';
-import { mkdtempSync, realpathSync } from 'node:fs';
+import { describe, it, expect, afterAll } from 'vitest';
+import { rmSync, mkdtempSync, realpathSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { randomUUID } from 'node:crypto';
-import { startTestServerWithAgents } from '../../../helpers/test-server-with-agents.js';
+import { startTestServerWithAgents, TEST_CONTEXT_BLOCK_CAP, buildTestAgentConfig } from '../../../helpers/test-server-with-agents.js';
 
 /**
  * Returns a canonical (symlink-resolved) temp directory path.
@@ -12,9 +12,18 @@ import { startTestServerWithAgents } from '../../../helpers/test-server-with-age
  * The server's cwd-validator always canonicalizes via realpathSync, so the registry
  * key will be the canonical path.
  */
+/** Every cwd this file created, so they can be removed at the end rather than accumulating. */
+const tmpCwds: string[] = [];
+
 function makeTmpCwd(): string {
-  return realpathSync(mkdtempSync(join(tmpdir(), 'mma-ctx-block-test-')));
+  const dir = realpathSync(mkdtempSync(join(tmpdir(), 'mma-ctx-block-test-')));
+  tmpCwds.push(dir);
+  return dir;
 }
+
+afterAll(() => {
+  for (const dir of tmpCwds) { try { rmSync(dir, { recursive: true, force: true }); } catch { /* best effort */ } }
+});
 
 async function createBlock(
   serverUrl: string,
@@ -103,23 +112,23 @@ describe('POST /context-blocks', () => {
     }
   });
 
-  it('returns 413 payload_too_large when content exceeds maxContextBlockBytes', async () => {
-    const s = await startTestServerWithAgents();
-    // Artificially lower the limit by patching the config in the registry
-    // We can't inject custom config limits through startTestServerWithAgents directly,
-    // so we test via a block that exceeds the default 524288-byte cap
-    // by crafting a block just over the limit.
-    // Since the default is 512KB, we use an alternate approach:
-    // Use startTestServerWithAgents with no overrides and test the server's default
-    // by using a known content that's actually oversized.
-    //
-    // For a reliable test, we inject the size check directly via the handler's deps.
-    // Since we can't easily override the limit, we test the server default path instead
-    // by using our own inline server with a small limit.
+  /**
+   * The cap enforced must be the CONFIGURED one.
+   *
+   * This used to post 524_289 bytes against the default 524_288 limit, under six lines of
+   * comment explaining that the helper could not inject a custom limit ("we test the server
+   * default path instead"). Asserting the default cannot distinguish an enforced config value
+   * from a hardcoded constant — and the helper's limitation was a shallow spread that dropped
+   * `auth.tokenFile` along with the rest of the server block, now fixed.
+   *
+   * A 1KB configured cap with a 2KB body is rejected only if the config value is the one in
+   * force, and the second case proves the same body is accepted under the default — so the
+   * cap is being READ, not merely present.
+   */
+  it('returns 413 payload_too_large at the CONFIGURED maxContextBlockBytes', async () => {
+    const s = await startTestServerWithAgents({ server: { limits: { maxContextBlockBytes: 1024 } } });
     const cwd = makeTmpCwd();
     try {
-      // Default limit is 524288 (512KB) — test a block that exceeds this
-      const oversized = 'a'.repeat(524_289); // 524289 bytes > 524288 byte limit
       const res = await fetch(`${s.url}/context-blocks?cwd=${encodeURIComponent(cwd)}`, {
         method: 'POST',
         headers: {
@@ -127,7 +136,7 @@ describe('POST /context-blocks', () => {
           Authorization: `Bearer ${s.token}`,
           'content-type': 'application/json',
         },
-        body: JSON.stringify({ content: oversized }),
+        body: JSON.stringify({ content: 'a'.repeat(2048) }),
       });
       expect(res.status).toBe(413);
       const json = await res.json() as { error: { code: string } };
@@ -137,23 +146,46 @@ describe('POST /context-blocks', () => {
     }
   });
 
+  it('accepts that same body under the default cap', async () => {
+    const s = await startTestServerWithAgents();
+    const cwd = makeTmpCwd();
+    try {
+      const res = await fetch(`${s.url}/context-blocks?cwd=${encodeURIComponent(cwd)}`, {
+        method: 'POST',
+        headers: {
+          "X-MMA-Main-Model": "claude-opus-4-7", "X-MMA-Client": "claude-code",
+          Authorization: `Bearer ${s.token}`,
+          'content-type': 'application/json',
+        },
+        body: JSON.stringify({ content: 'a'.repeat(2048) }),
+      });
+      expect(res.status).not.toBe(413);
+    } finally {
+      await s.stop();
+    }
+  });
+
   it('returns 409 cap_exhausted when project is at block cap', async () => {
     const s = await startTestServerWithAgents();
     const cwd = makeTmpCwd();
     try {
-      // Fill to the default cap of 32 blocks using direct registry access
-      // to avoid 32 HTTP round trips. We inject them directly via the store.
+      // Fill to the cap using direct registry access rather than one HTTP round trip per block.
+      //
+      // The cap here is the TEST SERVER's (`TEST_CONTEXT_BLOCK_CAP`), not a default — the
+      // production default is 500, and this comment used to call 32 "the default cap", which
+      // would send anyone debugging a real cap_exhausted to the wrong number. Taking it from the
+      // helper is also what makes the case meaningful: a hardcoded 32 on both sides would pass
+      // whether or not the handler reads the configured value.
       //
       // First: trigger project creation via one real HTTP request
       await createBlock(s.url, s.token, cwd, 'first-real-block');
       const pc = s.projectRegistry.get(cwd)!;
 
-      // Then fill the remaining 31 slots directly
-      for (let i = 0; i < 31; i++) {
+      // Then fill the remaining slots directly
+      for (let i = 0; i < TEST_CONTEXT_BLOCK_CAP - 1; i++) {
         pc.contextBlocks.register(`filler-block-${i}`);
       }
-      // Now the store has 32 blocks (at cap)
-      expect(pc.contextBlocks.size).toBe(32);
+      expect(pc.contextBlocks.size).toBe(TEST_CONTEXT_BLOCK_CAP);
 
       // Next POST should fail with 409 cap_exhausted
       const res = await fetch(`${s.url}/context-blocks?cwd=${encodeURIComponent(cwd)}`, {
@@ -327,5 +359,91 @@ describe('DELETE /context-blocks/:id', () => {
     } finally {
       await s.stop();
     }
+  });
+});
+
+/**
+ * The configured cap must bind BOTH registration paths.
+ *
+ * `POST /context-blocks` checks `maxContextBlocksPerProject` and returns 409 — but that check
+ * lives in the handler, and it is not the only way a block is created. Every read-route execution
+ * registers its terminal report straight into the project's store
+ * (`execution-runtime.ts`: `contextBlockStore.register(terminalContent)`), which never passes the
+ * handler. The store fell back to its own hardcoded bound, which happened to equal the CONFIG
+ * default — so the setting looked honoured while lowering it bounded only half the traffic, which
+ * is the half an operator lowering it is least worried about.
+ */
+describe('maxContextBlocksPerProject bounds the store itself, not just the handler', () => {
+  it('direct registrations cannot exceed the configured cap', async () => {
+    const s = await startTestServerWithAgents();
+    const cwd = makeTmpCwd();
+    try {
+      await createBlock(s.url, s.token, cwd, 'seed');
+      const pc = s.projectRegistry.get(cwd)!;
+
+      // Bypass the handler exactly the way the runtime does, well past the cap.
+      for (let i = 0; i < TEST_CONTEXT_BLOCK_CAP * 3; i += 1) {
+        pc.contextBlocks.register(`terminal-report-${i}`);
+      }
+
+      expect(
+        pc.contextBlocks.size,
+        `store grew to ${pc.contextBlocks.size} with a configured cap of ${TEST_CONTEXT_BLOCK_CAP}`,
+      ).toBeLessThanOrEqual(TEST_CONTEXT_BLOCK_CAP);
+    } finally {
+      await s.stop();
+    }
+  });
+});
+
+/**
+ * The helper's merge must be as deep as its type claims.
+ *
+ * `buildTestAgentConfig` takes a `DeepPartial<MultiModelConfig>` and merged only `server` and
+ * `server.limits` by hand, replacing `agents` and `server.auth` wholesale. Two traps followed. Loud:
+ * `{agents:{standard:{…}}}` typechecks and drops complex+main, throwing at `assertRunnable`. Silent
+ * and worse: overriding all three tiers partially typechecks and yields tiers with no `type` —
+ * `assertRunnable` checks only that each tier KEY exists, never its contents, so the server starts
+ * and the provider factory receives `type: undefined`.
+ */
+describe('the test config helper merges deeply', () => {
+  // `buildTestAgentConfig` mkdtemps a state dir on every call, even for a caller that never boots
+  // a server — so these config-only cases must remove what they create, or they leak a directory
+  // each. (That eager creation is why the helpers' own `stop()` cleanup is not sufficient on its
+  // own: the dir exists before any server does.)
+  const built: string[] = [];
+  const build = (overrides: Parameters<typeof buildTestAgentConfig>[0]) => {
+    const config = buildTestAgentConfig(overrides);
+    const dir = config.server?.stateDir;
+    if (dir) built.push(dir);
+    return config;
+  };
+  afterAll(() => {
+    for (const dir of built) { try { rmSync(dir, { recursive: true, force: true }); } catch { /* best effort */ } }
+  });
+
+  it('overriding one tier keeps the other two', () => {
+    // A partial tier (`{ model }` with no `type`) does NOT typecheck — DeepPartial does not recurse
+    // into the tier's discriminated union, so `type` stays required, and that trap is closed by the
+    // type rather than by the merge. What the merge must still get right is the SIBLING tiers: a
+    // wholesale replacement of `agents` drops complex and main and throws at assertRunnable.
+    const config = buildTestAgentConfig({
+      agents: { standard: { type: 'codex', model: 'custom-model' } },
+    });
+    expect(config.agents?.complex, 'complex was dropped by a shallow merge').toBeDefined();
+    expect(config.agents?.main, 'main was dropped by a shallow merge').toBeDefined();
+    expect(config.agents?.standard?.model).toBe('custom-model');
+  });
+
+  it('a partial auth override keeps tokenFile', () => {
+    const config = build({ server: { auth: {} } });
+    expect(config.server?.auth?.tokenFile, 'auth was replaced wholesale').toBeDefined();
+  });
+
+  it('an unrelated limit override still keeps stateDir and the other limits', () => {
+    const config = build({ server: { limits: { maxContextBlockBytes: 1024 } } });
+    expect(config.server?.limits?.maxContextBlockBytes).toBe(1024);
+    expect(config.server?.limits?.projectCap).toBeDefined();
+    expect(config.server?.stateDir).toBeDefined();
   });
 });

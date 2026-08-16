@@ -23,6 +23,25 @@ const BUDGET_BYTES = 120_000;
 
 let root: string;
 
+/** Same node, with a description built from 3-byte-per-character text. */
+function writeMultibyteNode(dir: string, id: string, descriptionLength: number): void {
+  // Each of these characters is one UTF-16 code unit and THREE UTF-8 bytes, so a payload
+  // measured with `.length` reads at a third of its real size.
+  const description = '設定 構築 検証 計画 仕様 確認 資料 '.repeat(Math.ceil(descriptionLength / 24)).slice(0, descriptionLength);
+  writeFileSync(
+    path.join(dir, `${id}-node-${id}.md`),
+    [
+      '---', `id: "${id}"`, `title: "Node ${id} config build test verify plan spec review"`,
+      'type: "decision"', 'topic: "test-corpus"', 'status: "adopted"',
+      'tags:', '  - config', '  - retrieval',
+      'timestamp: "2026-01-06T00:00:00Z"', 'links: []', 'supersededBy: null', 'source: "Execute"',
+      `description: "${description}"`, '---', '',
+      'config build test verify plan spec review data model service handler route worker '.repeat(60),
+    ].join('\n'),
+    'utf8',
+  );
+}
+
 function writeNode(dir: string, id: string, descriptionLength: number): void {
   // A long `description` is the realistic bloat vector: frontmatter says
   // "one line" but nothing enforces it, and it is multiplied by candidate count.
@@ -84,7 +103,10 @@ describe('journal recall: preview budget', () => {
 
       expect(result.candidates.length).toBeGreaterThan(0);
 
-      const bytes = JSON.stringify(result.candidates).length;
+      // `Buffer.byteLength`, not `.length`. This assertion called its own value "bytes" while
+      // counting UTF-16 code units — the same slip the implementation had, so an ASCII fixture
+      // could not tell them apart and the test agreed with the bug.
+      const bytes = Buffer.byteLength(JSON.stringify(result.candidates), 'utf8');
       expect(bytes, `assembled previews were ${bytes} bytes`).toBeLessThanOrEqual(BUDGET_BYTES);
 
       // Accounting must balance: every ranked candidate is either kept or counted.
@@ -140,4 +162,39 @@ describe('journal recall: preview budget', () => {
       rmSync(solo, { recursive: true, force: true });
     }
   });
+
+  /**
+   * The budget is named in BYTES and bounds what reaches a worker's prompt.
+   *
+   * `applyPreviewBudget` measured each candidate with `JSON.stringify(candidate).length` —
+   * UTF-16 code units. For ASCII the two agree, which is every fixture above, so the slip was
+   * invisible. A journal written in Japanese (or with accented words, or emoji) measured at a
+   * third of its real size and the assembled payload could overshoot 120 KB by ~3x — the exact
+   * ceiling this budget exists to hold.
+   */
+  it('holds the byte budget for a corpus that is not ASCII', async () => {
+    const mbRoot = mkdtempSync(path.join(tmpdir(), 'mma-recall-budget-mb-'));
+    try {
+      const nodes = path.join(mbRoot, '.mma', 'journal', 'nodes');
+      mkdirSync(nodes, { recursive: true });
+      for (let i = 1; i <= 400; i++) writeMultibyteNode(nodes, String(i).padStart(4, '0'), 2000);
+
+      const store = await JournalIndexStore.open({ journalRoot: path.join(mbRoot, '.mma', 'journal') });
+      try {
+        const result = await searchCandidatesForRecall(store, {
+          prompt: 'config build test verify plan spec review data',
+          includeHistory: false,
+        });
+        expect(result.candidates.length).toBeGreaterThan(0);
+
+        const bytes = Buffer.byteLength(JSON.stringify(result.candidates), 'utf8');
+        expect(bytes, `assembled previews were ${bytes} bytes, over a ${BUDGET_BYTES}-byte budget`)
+          .toBeLessThanOrEqual(BUDGET_BYTES);
+      } finally {
+        store.close();
+      }
+    } finally {
+      rmSync(mbRoot, { recursive: true, force: true });
+    }
+  }, 60_000);
 });

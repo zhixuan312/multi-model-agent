@@ -19,9 +19,33 @@ import {
   provisioningLockPath,
   ProvisioningLockTimeoutError,
 } from '../../../packages/server/src/provisioning/provisioning-lock.js';
-import { createProvisioningService } from '../../../packages/server/src/provisioning/service.js';
+import { provisioningTestFixture } from '../fixtures/provisioning-fixture.js';
+import { CLIENT_IDS } from '../../../packages/core/src/clients/client-id.js';
 
 const stateDir = () => mkdtempSync(join(tmpdir(), 'mma-lock-'));
+
+/**
+ * A clock the test drives, for the cases that only wait in order to time out.
+ *
+ * `acquireProvisioningLock` declares `now`/`sleep` "injected for tests" and no test injected
+ * either — a dormant seam, and the reason these cases spent real wall-clock polling. Advancing
+ * virtual time inside `sleep` makes them deterministic and instant while exercising the seam.
+ *
+ * It starts from the REAL clock rather than zero: the staleness rule compares `now()` against the
+ * lock file's `mtimeMs`, so a clock in 1970 would make every file look impossibly old and answer
+ * "abandoned" for the wrong reason.
+ */
+function virtualClock(): { now: () => number; sleep: (ms: number) => Promise<void> } {
+  let t = Date.now();
+  return {
+    now: () => t,
+    // Advances virtual time AND yields a real macrotask. Resolving as a bare microtask makes the
+    // acquire loop spin without ever returning to the event loop, so if the timeout check were
+    // broken these cases would HANG instead of failing — vitest's own timer could never fire.
+    // Verified: with the timeout removed, the microtask version hung indefinitely.
+    sleep: async (ms: number) => { t += ms; await new Promise((resolve) => setImmediate(resolve)); },
+  };
+}
 
 describe('contract: the provisioning lock serialises mutations across processes', () => {
   it('a second acquirer waits, then gets it once the first releases', async () => {
@@ -45,7 +69,7 @@ describe('contract: the provisioning lock serialises mutations across processes'
     // the timeout is a hard error naming the holder — not a silent fallback.
     const dir = stateDir();
     const held = await acquireProvisioningLock(dir);
-    await expect(acquireProvisioningLock(dir, { timeoutMs: 120 }))
+    await expect(acquireProvisioningLock(dir, { timeoutMs: 120, ...virtualClock() }))
       .rejects.toBeInstanceOf(ProvisioningLockTimeoutError);
     held.release();
   });
@@ -64,7 +88,7 @@ describe('contract: the provisioning lock serialises mutations across processes'
     // running" answered locally would happily steal a live remote holder's lock.
     const dir = stateDir();
     writeFileSync(provisioningLockPath(dir), JSON.stringify({ pid: 4_194_304, host: 'some-other-machine', acquiredAt: Date.now() }));
-    await expect(acquireProvisioningLock(dir, { timeoutMs: 120 }))
+    await expect(acquireProvisioningLock(dir, { timeoutMs: 120, ...virtualClock() }))
       .rejects.toBeInstanceOf(ProvisioningLockTimeoutError);
   });
 
@@ -72,7 +96,7 @@ describe('contract: the provisioning lock serialises mutations across processes'
     const dir = stateDir();
     writeFileSync(provisioningLockPath(dir), 'not json {{{');
     // Fresh: could be a file being written right this instant.
-    await expect(acquireProvisioningLock(dir, { timeoutMs: 120, staleMs: 60_000 }))
+    await expect(acquireProvisioningLock(dir, { timeoutMs: 120, staleMs: 60_000, ...virtualClock() }))
       .rejects.toBeInstanceOf(ProvisioningLockTimeoutError);
     // Aged out: there is no holder left to ask.
     const lock = await acquireProvisioningLock(dir, { timeoutMs: 2_000, staleMs: 0 });
@@ -108,7 +132,7 @@ describe('contract: shared-root reference counting counts root sharers only', ()
     // Counting every enabled client instead left ~/.claude/skills on disk
     // forever whenever codex happened to be on — a disable that reported
     // success and removed nothing.
-    const fixture = createProvisioningService.testFixture({
+    const fixture = provisioningTestFixture({
       clients: { 'claude-code': 'on', codex: 'on' },
     });
     await fixture.provisionAll();
@@ -122,7 +146,7 @@ describe('contract: shared-root reference counting counts root sharers only', ()
   });
 
   it('keeps a genuinely shared root while a sharer is still enabled', async () => {
-    const fixture = createProvisioningService.testFixture({
+    const fixture = provisioningTestFixture({
       clients: { cursor: 'on', vscode: 'on' },
     });
     await fixture.provisionAll();
@@ -135,7 +159,7 @@ describe('contract: shared-root reference counting counts root sharers only', ()
   });
 
   it('removes the shared root once its last consumer leaves', async () => {
-    const fixture = createProvisioningService.testFixture({
+    const fixture = provisioningTestFixture({
       clients: { cursor: 'on', vscode: 'on' },
     });
     await fixture.provisionAll();
@@ -153,7 +177,7 @@ describe('contract: the service actually takes the lock', () => {
   it('a mutation refuses while another process holds it; a read does not', async () => {
     // Testing the lock module alone proves the primitive works, not that
     // provisioning uses it — the wiring is the part that can silently regress.
-    const fixture = createProvisioningService.testFixture({
+    const fixture = provisioningTestFixture({
       clients: { cursor: 'on' },
       lockOptions: { timeoutMs: 150 },
     });
@@ -165,7 +189,7 @@ describe('contract: the service actually takes the lock', () => {
         .rejects.toBeInstanceOf(ProvisioningLockTimeoutError);
       // Inventory is read-only: blocking it would make `mma clients` hang
       // behind an npm postinstall for no benefit.
-      await expect(fixture.inventory()).resolves.toHaveLength(8);
+      await expect(fixture.inventory()).resolves.toHaveLength(CLIENT_IDS.length);
     } finally {
       held.release();
     }

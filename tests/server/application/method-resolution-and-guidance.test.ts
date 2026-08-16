@@ -13,6 +13,59 @@ vi.mock('@zhixuan92/multi-model-agent-core', async (importOriginal) => ({
   runTwoPhasePipeline: seams.pipeline,
 }));
 
+/**
+ * The runtime, its two registries and the spies both ordering cases need.
+ *
+ * The two cases below differ only in whether the request carries its own `method`; everything
+ * else — a full `ExecutionRuntime` with three tiers, a stubbed Initiative runtime whose second
+ * call throws, and spies on `register`/`admit` — was written out twice, verbatim. One added
+ * constructor dependency meant editing both, and a case left behind would still pass while
+ * exercising a differently-wired runtime than its sibling.
+ */
+async function orderingHarness(label: string) {
+  const stateDir = mkdtempSync(join(tmpdir(), `mma-method-order-${label}-`));
+  const { ExecutionRuntime } = await import('../../../packages/server/src/application/execution-runtime.js');
+  const { ExecutionRegistry } = await import('@zhixuan92/multi-model-agent-core');
+  const { EnvelopeBus } = await import('@zhixuan92/multi-model-agent-core/events/envelope-bus');
+  const registry = new ExecutionRegistry();
+  const store = new ExecutionStore({ dbPath: join(stateDir, 'executions.db'), ttlMs: 60_000 });
+  const register = vi.spyOn(registry, 'register');
+  const admit = vi.spyOn(store, 'admit');
+  // First call resolves the Initiative; the second — the linked Task read — throws, which is
+  // the rejection both cases are about.
+  const initiativeRuntime = { execute: vi.fn()
+    .mockReturnValueOnce({ uuid: '00000000-0000-4000-8000-000000000001' })
+    .mockImplementationOnce(() => { throw new Error('Task is closed'); }) };
+  const runtime = new ExecutionRuntime({
+    config: { agents: { standard: { type: 'codex', model: 'm' }, complex: { type: 'codex', model: 'm' }, main: { type: 'codex', model: 'm' } }, server: { stateDir } } as never,
+    bus: new EnvelopeBus(), executionRegistry: registry, projectRegistry: new ProjectRegistry({ cap: 2 }), store,
+    initiativeRuntime: initiativeRuntime as never,
+  });
+  const LINKAGE = {
+    initiative: { uuid: '00000000-0000-4000-8000-000000000001' },
+    task_uuid: '00000000-0000-4000-8000-000000000002',
+    authorized_by: 'a',
+  };
+  return {
+    stateDir, registry, store, register, admit, initiativeRuntime, runtime,
+    submit: (extra: Record<string, unknown>) => runtime.submit(
+      { type: 'review', target: { paths: ['/tmp/x.ts'] }, ...extra, initiative: LINKAGE } as never,
+      { clientName: 'test', projectRoot: stateDir },
+    ),
+    /** Nothing durable, in-flight or loaded may exist after a rejection on this side. */
+    expectNoSideEffects() {
+      expect(seams.loadSkill).not.toHaveBeenCalled();
+      expect(seams.pipeline).not.toHaveBeenCalled();
+      expect(register).not.toHaveBeenCalled();
+      expect(admit).not.toHaveBeenCalled();
+      expect(registry.allInFlight()).toEqual([]);
+      expect(store.listUnconsumedOutbox()).toEqual([]);
+      expect(store.interruptedSince(0)).toEqual([]);
+    },
+    close() { runtime.close(); store.close(); rmSync(stateDir, { recursive: true, force: true }); },
+  };
+}
+
 describe('Method resolution and validated prompt injection', () => {
   it('accepts method on every one of the twelve task types and leaves the route set unchanged', () => {
     // AC-1.7 needs coverage across ALL twelve routes, not one — a field added to only one
@@ -45,35 +98,13 @@ describe('Method resolution and validated prompt injection', () => {
   });
 
   it('rejects an invalid linked Task before every downstream side effect', async () => {
-    const stateDir = mkdtempSync(join(tmpdir(), 'mma-method-order-'));
+    const h = await orderingHarness('no-method');
     try {
-      const { ExecutionRuntime } = await import('../../../packages/server/src/application/execution-runtime.js');
-      const { ExecutionRegistry } = await import('../../../packages/core/src/unified/task-registry.js');
-      const { EnvelopeBus } = await import('../../../packages/core/src/events/envelope-bus.js');
-      const registry = new ExecutionRegistry();
-      const store = new ExecutionStore({ dbPath: join(stateDir, 'executions.db'), ttlMs: 60_000 });
-      const register = vi.spyOn(registry, 'register');
-      const admit = vi.spyOn(store, 'admit');
-      const initiativeRuntime = { execute: vi.fn()
-        .mockReturnValueOnce({ uuid: '00000000-0000-4000-8000-000000000001' })
-        .mockImplementationOnce(() => { throw new Error('Task is closed'); }) };
-      const runtime = new ExecutionRuntime({
-        config: { agents: { standard: { type: 'codex', model: 'm' }, complex: { type: 'codex', model: 'm' }, main: { type: 'codex', model: 'm' } }, server: { stateDir } } as never,
-        bus: new EnvelopeBus(), executionRegistry: registry, projectRegistry: new ProjectRegistry({ cap: 2 }), store,
-        initiativeRuntime: initiativeRuntime as never,
-      });
-      const outcome = await runtime.submit({ type: 'review', target: { paths: ['/tmp/x.ts'] }, initiative: { initiative: { uuid: '00000000-0000-4000-8000-000000000001' }, task_uuid: '00000000-0000-4000-8000-000000000002', authorized_by: 'a' } } as never, { clientName: 'test', projectRoot: stateDir });
+      const outcome = await h.submit({});
       expect(outcome).toMatchObject({ ok: false, error: { code: 'invalid_request' } });
-      expect(initiativeRuntime.execute).toHaveBeenCalledTimes(2);
-      expect(seams.loadSkill).not.toHaveBeenCalled();
-      expect(seams.pipeline).not.toHaveBeenCalled();
-      expect(register).not.toHaveBeenCalled();
-      expect(admit).not.toHaveBeenCalled();
-      expect(registry.allInFlight()).toEqual([]);
-      expect(store.listUnconsumedOutbox()).toEqual([]);
-      expect(store.interruptedSince(0)).toEqual([]);
-      runtime.close(); store.close();
-    } finally { rmSync(stateDir, { recursive: true, force: true }); }
+      expect(h.initiativeRuntime.execute).toHaveBeenCalledTimes(2);
+      h.expectNoSideEffects();
+    } finally { h.close(); }
   });
 
   it('rejects an invalid linked Task before resolving an unregistered explicit method', async () => {
@@ -82,43 +113,18 @@ describe('Method resolution and validated prompt injection', () => {
     // actually catch a regression that resolves Method before linked-Task validation: if
     // resolution ran first, this would fail with `unknown_method` instead of the linked-Task
     // error, and `method_get` would have been called.
-    const stateDir = mkdtempSync(join(tmpdir(), 'mma-method-order-both-invalid-'));
+    const h = await orderingHarness('both-invalid');
     try {
-      const { ExecutionRuntime } = await import('../../../packages/server/src/application/execution-runtime.js');
-      const { ExecutionRegistry } = await import('../../../packages/core/src/unified/task-registry.js');
-      const { EnvelopeBus } = await import('../../../packages/core/src/events/envelope-bus.js');
-      const registry = new ExecutionRegistry();
-      const store = new ExecutionStore({ dbPath: join(stateDir, 'executions.db'), ttlMs: 60_000 });
-      const register = vi.spyOn(registry, 'register');
-      const admit = vi.spyOn(store, 'admit');
-      const initiativeRuntime = { execute: vi.fn()
-        .mockReturnValueOnce({ uuid: '00000000-0000-4000-8000-000000000001' })
-        .mockImplementationOnce(() => { throw new Error('Task is closed'); }) };
-      const runtime = new ExecutionRuntime({
-        config: { agents: { standard: { type: 'codex', model: 'm' }, complex: { type: 'codex', model: 'm' }, main: { type: 'codex', model: 'm' } }, server: { stateDir } } as never,
-        bus: new EnvelopeBus(), executionRegistry: registry, projectRegistry: new ProjectRegistry({ cap: 2 }), store,
-        initiativeRuntime: initiativeRuntime as never,
-      });
-      const outcome = await runtime.submit({
-        type: 'review', target: { paths: ['/tmp/x.ts'] }, method: 'missing@1',
-        initiative: { initiative: { uuid: '00000000-0000-4000-8000-000000000001' }, task_uuid: '00000000-0000-4000-8000-000000000002', authorized_by: 'a' },
-      } as never, { clientName: 'test', projectRoot: stateDir });
+      const outcome = await h.submit({ method: 'missing@1' });
       // The linked-Task error wins — NOT unknown_method — proving resolution still runs after
       // validation even when the request supplies its own method.
       expect(outcome).toMatchObject({ ok: false, error: { code: 'invalid_request' } });
       expect(outcome).not.toMatchObject({ error: { kind: 'unknown_method' } });
       // Exactly the two linked-Task reads (initiative_get, initiative_task_get) — a third call
       // would be method_get, which must never fire once linked-Task validation has already failed.
-      expect(initiativeRuntime.execute).toHaveBeenCalledTimes(2);
-      expect(initiativeRuntime.execute).not.toHaveBeenCalledWith(expect.objectContaining({ operation: 'method_get' }));
-      expect(seams.loadSkill).not.toHaveBeenCalled();
-      expect(seams.pipeline).not.toHaveBeenCalled();
-      expect(register).not.toHaveBeenCalled();
-      expect(admit).not.toHaveBeenCalled();
-      expect(registry.allInFlight()).toEqual([]);
-      expect(store.listUnconsumedOutbox()).toEqual([]);
-      expect(store.interruptedSince(0)).toEqual([]);
-      runtime.close(); store.close();
-    } finally { rmSync(stateDir, { recursive: true, force: true }); }
+      expect(h.initiativeRuntime.execute).toHaveBeenCalledTimes(2);
+      expect(h.initiativeRuntime.execute).not.toHaveBeenCalledWith(expect.objectContaining({ operation: 'method_get' }));
+      h.expectNoSideEffects();
+    } finally { h.close(); }
   });
 });

@@ -56,9 +56,19 @@ export const executePlanPreprocessor: Preprocessor = async ({ cwd, payload }) =>
   }
   const selectedSnapshot: ContractPlanSnapshot = Object.freeze({ tasks: Object.freeze(selectedTasks) });
 
-  // Path-safety preflight against the original (pre-worktree) cwd. The pipeline
-  // repeats this against effectiveCwd/the worktree once materialization can
-  // actually happen there; both checks legitimately coexist.
+  // Path-safety preflight, before any provider session opens: a plan declaring an acceptance-test
+  // path that escapes the cwd fails here, having run nothing.
+  //
+  // The pipeline runs the SAME check again immediately before materializing (two-phase-pipeline
+  // `assertSafeAcceptanceTestPaths` → `materializeAcceptanceTests`). Both coexist because they
+  // happen at different TIMES, not against different directories: this one buys a terminal
+  // failure with zero provider cost, and the pipeline's is adjacent to the write, so nothing can
+  // change on disk between the check and the act.
+  //
+  // The comment here used to say the pipeline repeats it "against effectiveCwd/the worktree",
+  // which described a second directory that has not existed since the engine stopped creating
+  // worktrees — `effectiveCwd` is now literally `input.cwd`. Read as written, it implied the two
+  // checks covered different paths, which is the one thing that would make dropping either safe.
   try {
     await assertSafeAcceptanceTestPaths(selectedSnapshot, cwd);
   } catch (err) {

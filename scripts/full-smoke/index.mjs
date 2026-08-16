@@ -32,8 +32,40 @@ import { verify } from './verify.mjs';
 import { report } from './report.mjs';
 import { teardown } from './teardown.mjs';
 import { startAvailabilityProbe } from './availability.mjs';
+import { runRecordSurface } from './record-surface.mjs';
 
 const argv = process.argv.slice(2);
+
+/**
+ * Reject an argument this harness does not understand, instead of ignoring it.
+ *
+ * Every value flag here is `--name=value`. Writing the space form (`--only 40`) parses as an
+ * unrecognised `--only` plus a stray `40`, both silently dropped — so the run quietly becomes a
+ * FULL sweep. A full sweep costs real provider spend and around twenty minutes, and the operator
+ * only finds out at the end, from a report covering scenarios they did not ask for. A typo must
+ * cost one line of stderr, not a full run.
+ */
+const VALUE_FLAGS = ['--only', '--branch', '--concurrency'];
+const BOOLEAN_FLAGS = [
+  // `--skip-lifecycle` is read at :79 and consumed by preflight, whose docstring tells the
+  // operator to "pass --skip-lifecycle to opt out" of stopping their live daemon. It was missing
+  // here, so the validator below exited 2 before the flag could ever be honoured — the escape
+  // hatch was documented, parsed, and unreachable.
+  '--skip-backend', '--strict', '--allow-mismatch', '--wait-flush', '--sequential',
+  '--skip-lifecycle',
+];
+for (const [i, a] of argv.entries()) {
+  if (BOOLEAN_FLAGS.includes(a)) continue;
+  if (VALUE_FLAGS.some((f) => a.startsWith(`${f}=`))) continue;
+  if (VALUE_FLAGS.includes(a)) {
+    console.error(`full-smoke: ${a} needs its value attached: ${a}=${argv[i + 1] ?? '<value>'}`);
+    process.exit(2);
+  }
+  console.error(`full-smoke: unknown argument "${a}"`);
+  console.error(`  flags: ${BOOLEAN_FLAGS.join(' ')} ${VALUE_FLAGS.map((f) => `${f}=…`).join(' ')}`);
+  process.exit(2);
+}
+
 const onlyArg = (argv.find((a) => a.startsWith('--only=')) || '').split('=')[1] || null;
 const opts = {
   skipBackend: argv.includes('--skip-backend'),
@@ -98,7 +130,7 @@ async function runScenario(spec, ctx, log) {
       rec.repeatCancel = res.repeatCancel;
       records.push(rec);
       checksByScenario[spec.id] = verify(rec);
-      log(`#${spec.id}  cancel  → ${res.envelope?.task?.status} (${res.envelope?.error?.code})`);
+      log(`#${spec.id}  cancel  → ${res.envelope?.execution?.status} (${res.envelope?.error?.code})`);
       return;
     }
 
@@ -123,7 +155,7 @@ async function runScenario(spec, ctx, log) {
       rec.mcpContract = res;
       records.push(rec);
       checksByScenario[spec.id] = verify(rec);
-      log(`#${spec.id}  mcp-contract  → taskId=${res.taskId} status=${res.envelope?.task?.status}`);
+      log(`#${spec.id}  mcp-contract  → taskId=${res.taskId} status=${res.envelope?.execution?.status}`);
       return;
     }
 
@@ -155,7 +187,7 @@ async function runScenario(spec, ctx, log) {
       rec.mcp = res;
       records.push(rec);
       checksByScenario[spec.id] = verify(rec);
-      log(`#${spec.id}  mcp  → taskId=${res.taskId} status=${res.waitPayload?.task?.status}`);
+      log(`#${spec.id}  mcp  → taskId=${res.taskId} status=${res.waitPayload?.execution?.status}`);
       return;
     }
 
@@ -181,6 +213,12 @@ async function runScenario(spec, ctx, log) {
     if (spec.id === 4) {
       const cb = envelope.output?.contextBlockId;
       if (cb) ctx.auditContextBlockId = cb;
+      // Retain round 1's finding CLAIMS so the delta round can be checked on the property the
+      // feature actually promises — that round 2 does not re-report what round 1 already said.
+      // Counting round-2 findings cannot distinguish "correctly found nothing new" from "never
+      // received the block", which is why that check could only ever WARN.
+      const f = envelope.output?.summary?.findings;
+      ctx.auditRound1Claims = Array.isArray(f) ? f.map((x) => String(x?.claim ?? '').trim()).filter(Boolean) : [];
     }
 
     const queue = collectQueue(queueBefore);
@@ -200,6 +238,8 @@ async function runScenario(spec, ctx, log) {
     if (polling202) rec.polling202 = polling202;
     if (polling202Last) rec.polling202Last = polling202Last;
     if (res.admission) rec.admission = res.admission;
+    // The delta round needs round 1's claims to prove it did not simply re-report them.
+    if (spec.delta) rec.round1Claims = ctx.auditRound1Claims ?? [];
     if (spec.sessionReuse && ctx.sessionFromScenario2) {
       rec.resumeSessionId = ctx.sessionFromScenario2;
     }
@@ -382,7 +422,7 @@ async function runScenario(spec, ctx, log) {
     const fails = checks.filter(c => c.status === 'FAIL').length;
     const warns = checks.filter(c => c.status === 'WARN').length;
     const cost = envelope.metrics?.implementer?.costUsd ?? 0;
-    const status = envelope.task?.status ?? '?';
+    const status = envelope.execution?.status ?? '?';
     log(`#${spec.id}  ${spec.type}  → ${status}  $${cost.toFixed(4)}  ${fails ? `${fails} FAIL` : warns ? `${warns} WARN` : '✓'}`);
     if (spec.kind === 'write' && !ctx.writeRepos?.[spec.id]) keepWorkspaceClean(ctx.dir);
     totalCostUSD += envelope.metrics?.totalCostUsd ?? 0;
@@ -507,6 +547,7 @@ try {
       [57],          // investigate a NON-CODE workspace (documents + data, no source)
       [58],          // plan a NON-CODE deliverable (no build, no suite, no tests/)
       [59],          // a client that abandons the request must still be able to reconcile
+      [60],          // POST /configure-provider — validation contract (never a live swap)
     ];
 
     // Coverage guard. phase2Threads is a hand-maintained schedule, so a scenario
@@ -565,6 +606,17 @@ try {
       await Promise.all(Array.from({ length: Math.min(cap, p2Threads.length) }, worker));
     }
 
+  }
+
+  // ── Initiative Record surface ──
+  // The numeric SCENARIOS above cover the EXECUTION routes only. Everything the grand plan
+  // promises about the RECORD (resume, lifecycle, methods, intake, delivery, portability) is
+  // exercised here, live, against the same daemon.
+  {
+    log('\n── Record surface (initiatives · lifecycle · methods · delivery · portability) ──');
+    const rs = await runRecordSurface(ctx, log);
+    for (const rec of rs.records) records.push(rec);
+    Object.assign(checksByScenario, rs.checksByScenario);
   }
 
   // Telemetry final settle: a short grace so trailing wire records from the last scenarios that

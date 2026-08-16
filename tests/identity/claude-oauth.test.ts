@@ -67,9 +67,26 @@ describe('getClaudeOAuth', () => {
     setPlatform(originalPlatform);
   });
 
-  it('case 1: returns null on non-darwin platforms', () => {
+  /**
+   * Renamed and made hermetic. It read `~/.claude/.credentials.json` off the REAL filesystem.
+   *
+   * `getClaudeOAuth()` with no overrides uses `defaultDeps`, and only `child_process` is mocked
+   * here — so on `linux` this called the real `readFileSync` against the developer's own
+   * credential file, and `toBeNull()` held only because that file happens not to exist on the
+   * host. On a Linux box with Claude Code logged in — the headless-container deployment this
+   * module was written for (ISSUE-10) — it returns real credentials and the case fails.
+   * Confirmed by running the file with HOME pointed at a directory containing one.
+   *
+   * The title was false besides: non-darwin does not return null by design, it reads the file
+   * store. The claim actually worth pinning is that it never shells out to `security`, since the
+   * Keychain does not exist there and a stray `security` call would be a hard failure rather than
+   * a fallback.
+   */
+  it('case 1: uses the file store and never invokes the macOS keychain on non-darwin', () => {
     setPlatform('linux');
-    expect(getClaudeOAuth()).toBeNull();
+    const readFile = vi.fn(() => { throw new Error('ENOENT'); });
+    expect(getClaudeOAuth({ readFile, homedir: () => '/home/svc' })).toBeNull();
+    expect(readFile).toHaveBeenCalledWith('/home/svc/.claude/.credentials.json');
     expect(mockExec).not.toHaveBeenCalled();
   });
 
@@ -320,5 +337,47 @@ describe('getClaudeOAuth (Linux / file store)', () => {
     });
     const creds = getClaudeOAuth(deps);
     expect(creds?.accessToken).toBe('tok-new');
+  });
+});
+
+/**
+ * Every `security` invocation must carry a timeout.
+ *
+ * They had none. `execFileSync` with no bound blocks for as long as the Keychain takes, which is
+ * forever if it is locked and prompting where nobody can answer — and this is reached from
+ * `POST /configure-provider`, which runs on the daemon's event loop, so an unanswerable prompt
+ * froze every other request including the unauthenticated `/health`. The refresh exchange was
+ * already bounded at 20s; the Keychain path was the one with no bound at all.
+ *
+ * Asserted on the OPTIONS each call passes rather than by timing anything: a duration test here
+ * would need a hung Keychain to be meaningful, and would pass vacuously on a machine without one.
+ */
+describe('keychain reads are bounded', () => {
+  it('passes a positive timeout on every security invocation', () => {
+    setPlatform('darwin');
+    const seen: Array<{ args: string[]; timeout: unknown }> = [];
+    mockExec.mockImplementation((cmd: string, args: string[], options?: { timeout?: unknown }) => {
+      if (cmd === 'security') {
+        seen.push({ args, timeout: options?.timeout });
+        if (args.includes('-w') && args[0] === 'find-generic-password') {
+          return JSON.stringify({
+            claudeAiOauth: { accessToken: 'tok', refreshToken: 'r', expiresAt: FAR_FUTURE_MS },
+          });
+        }
+        return `class: "genp"\n    "acct"<blob>="someone"\n`;
+      }
+      return '';
+    });
+
+    getClaudeOAuth();
+
+    expect(seen.length, 'no security invocation was observed').toBeGreaterThan(0);
+    for (const call of seen) {
+      expect(
+        call.timeout,
+        `security ${call.args[0]} runs unbounded — a locked keychain blocks the event loop`,
+      ).toEqual(expect.any(Number));
+      expect(call.timeout as number).toBeGreaterThan(0);
+    }
   });
 });

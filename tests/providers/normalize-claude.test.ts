@@ -12,7 +12,7 @@ describe('normalizeClaudeTurn', () => {
   it('extracts assistant text from assistant events', () => {
     const r = normalizeClaudeTurn(
       [asst('hello '), asst('world'), result('success', { input_tokens: 100, output_tokens: 50 })],
-      { durationMs: 1, costUSD: 0.001 },
+      { durationMs: 1.001 },
     );
     expect(r.output).toBe('hello world');
     expect(r.terminationReason).toBe('ok');
@@ -22,28 +22,28 @@ describe('normalizeClaudeTurn', () => {
   it('records Edit tool as filesWritten', () => {
     const r = normalizeClaudeTurn(
       [tool('Edit', { file_path: 'x.ts' }), result('success')],
-      { durationMs: 1, costUSD: 0 },
+      { durationMs: 1 },
     );
     expect(r.filesWritten).toEqual(['x.ts']);
   });
   it('records Bash tool as usedShell', () => {
     const r = normalizeClaudeTurn(
       [tool('Bash', { command: 'ls -la' }), result('success')],
-      { durationMs: 1, costUSD: 0 },
+      { durationMs: 1 },
     );
     expect(r.usedShell).toBe(true);
   });
   it('terminationReason ok from success', () => {
     const r = normalizeClaudeTurn(
       [result('success')],
-      { durationMs: 1, costUSD: 0 },
+      { durationMs: 1 },
     );
     expect(r.terminationReason).toBe('ok');
   });
   it('terminationReason error from error_during_execution', () => {
     const r = normalizeClaudeTurn(
       [result('error_during_execution', {}, { error: { message: 'Invalid API key for Anthropic' } })],
-      { durationMs: 1, costUSD: 0 },
+      { durationMs: 1 },
     );
     expect(r.terminationReason).toBe('error');
     expect(r.errorCode).toBe('sdk_execution_error');
@@ -52,7 +52,7 @@ describe('normalizeClaudeTurn', () => {
   it('error_max_turns maps to terminationReason=error + errorCode=sdk_max_turns', () => {
     const r = normalizeClaudeTurn(
       [result('error_max_turns')],
-      { durationMs: 1, costUSD: 0 },
+      { durationMs: 1 },
     );
     expect(r.terminationReason).toBe('error');
     expect(r.errorCode).toBe('sdk_max_turns');
@@ -60,21 +60,21 @@ describe('normalizeClaudeTurn', () => {
   it('terminationReason time_exceeded from guardTerminationReason', () => {
     const r = normalizeClaudeTurn(
       [result('success')],
-      { durationMs: 1, costUSD: 0, guardTerminationReason: 'time_exceeded' },
+      { durationMs: 1, guardTerminationReason: 'time_exceeded' },
     );
     expect(r.terminationReason).toBe('time_exceeded');
   });
   it('terminationReason stalled from guardTerminationReason', () => {
     const r = normalizeClaudeTurn(
       [result('success')],
-      { durationMs: 1, costUSD: 0, guardTerminationReason: 'stalled' },
+      { durationMs: 1, guardTerminationReason: 'stalled' },
     );
     expect(r.terminationReason).toBe('stalled');
   });
   it('terminationReason aborted from guardTerminationReason', () => {
     const r = normalizeClaudeTurn(
       [result('success')],
-      { durationMs: 1, costUSD: 0, guardTerminationReason: 'aborted' },
+      { durationMs: 1, guardTerminationReason: 'aborted' },
     );
     expect(r.terminationReason).toBe('aborted');
   });
@@ -95,7 +95,7 @@ describe('normalizeClaudeTurn — TokenUsage disjoint-partition contract', () =>
         cache_read_input_tokens: 700,
         cache_creation_input_tokens: 200,
       })],
-      { durationMs: 1, costUSD: 0 },
+      { durationMs: 1 },
     );
     expect(r.usage.inputTokens).toBe(100);
     expect(r.usage.outputTokens).toBe(50);
@@ -114,7 +114,7 @@ describe('normalizeClaudeTurn — TokenUsage disjoint-partition contract', () =>
         cache_creation_input_tokens: 900,
         // cache_read_input_tokens omitted (first request, nothing to read)
       })],
-      { durationMs: 1, costUSD: 0 },
+      { durationMs: 1 },
     );
     expect(r.usage.inputTokens).toBe(50);
     expect(r.usage.cachedReadTokens).toBe(0);
@@ -127,7 +127,7 @@ describe('normalizeClaudeTurn — TokenUsage disjoint-partition contract', () =>
   // what masked a dead implementer as a successful turn.
   describe("dead-stream guard ('ok' is earned, never defaulted)", () => {
     it('empty event stream is an error (sdk_no_result), not ok', () => {
-      const r = normalizeClaudeTurn([], { durationMs: 1, costUSD: 0 });
+      const r = normalizeClaudeTurn([], { durationMs: 1 });
       expect(r.terminationReason).toBe('error');
       expect(r.errorCode).toBe('sdk_no_result');
       expect(r.errorMessage).toMatch(/without a result event/);
@@ -136,7 +136,7 @@ describe('normalizeClaudeTurn — TokenUsage disjoint-partition contract', () =>
     it('assistant events without a terminal result event are an error', () => {
       const r = normalizeClaudeTurn(
         [asst('partial output before the stream died')],
-        { durationMs: 1, costUSD: 0 },
+        { durationMs: 1 },
       );
       expect(r.terminationReason).toBe('error');
       expect(r.errorCode).toBe('sdk_no_result');
@@ -147,7 +147,7 @@ describe('normalizeClaudeTurn — TokenUsage disjoint-partition contract', () =>
     it('guardTerminationReason takes precedence over the dead-stream guard', () => {
       // Deadline-closed stream with zero events: the wall-clock guard owns the
       // reason; sdk_no_result must not overwrite it.
-      const r = normalizeClaudeTurn([], { durationMs: 1, costUSD: 0, guardTerminationReason: 'time_exceeded' });
+      const r = normalizeClaudeTurn([], { durationMs: 1, guardTerminationReason: 'time_exceeded' });
       expect(r.terminationReason).toBe('time_exceeded');
       expect(r.errorCode).toBeUndefined();
     });
@@ -155,10 +155,58 @@ describe('normalizeClaudeTurn — TokenUsage disjoint-partition contract', () =>
     it('unknown non-success result subtype is an error (future SDK variants)', () => {
       const r = normalizeClaudeTurn(
         [result('error_some_future_variant')],
-        { durationMs: 1, costUSD: 0 },
+        { durationMs: 1 },
       );
       expect(r.terminationReason).toBe('error');
       expect(r.errorCode).toBe('sdk_error_some_future_variant');
     });
+  });
+});
+
+/**
+ * Every FIXED code this normalizer can emit must be in the canonical vocabulary.
+ *
+ * `error-codes.ts` says its enum is "kept in sync with the emitters", and `sdk_no_result` was
+ * not in it — so `coerceErrorCode` mapped it to `other` on the wire. That code exists precisely
+ * to distinguish a dead tier (subprocess died, proxy rejected the call) from an ordinary
+ * failure, and telemetry saw it as the same anonymous bucket as every unrecognised string. A
+ * comment claiming synchrony that nothing checks is how the two drifted.
+ *
+ * Derived by DRIVING the normalizer, not by re-listing the codes: each result subtype below is
+ * one the SDK actually emits, and the code it produces is read off the result.
+ */
+describe('normalizeClaudeTurn emits only canonical error codes', () => {
+  const FIXED_SUBTYPES = [
+    'error_max_turns',
+    'error_max_budget_usd',
+    'error_during_execution',
+    'error_max_structured_output_retries',
+  ] as const;
+
+  it('every fixed SDK subtype maps to a code the wire vocabulary knows', async () => {
+    const { ErrorCodeSchema } = await import('../../packages/core/src/error-codes.js');
+    for (const subtype of FIXED_SUBTYPES) {
+      const r = normalizeClaudeTurn([{ type: 'result', subtype, usage: {} }] as never[], { durationMs: 1 });
+      expect(r.errorCode, `subtype ${subtype} produced no code`).toBeTruthy();
+      expect(ErrorCodeSchema.safeParse(r.errorCode).success, `${r.errorCode} is not in ErrorCodeSchema`).toBe(true);
+    }
+  });
+
+  it('the dead-stream code is canonical too, so telemetry can still see it', async () => {
+    const { ErrorCodeSchema } = await import('../../packages/core/src/error-codes.js');
+    const r = normalizeClaudeTurn([] as never[], { durationMs: 1 });
+    expect(r.errorCode).toBe('sdk_no_result');
+    expect(ErrorCodeSchema.safeParse('sdk_no_result').success).toBe(true);
+  });
+
+  it('an UNKNOWN future subtype is deliberately outside the vocabulary, and coerces to other', async () => {
+    // The dynamic `sdk_${subtype}` case cannot be enumerated ahead of time — `other` is the
+    // documented sentinel for it, and that is a different thing from a fixed code going missing.
+    const { ErrorCodeSchema } = await import('../../packages/core/src/error-codes.js');
+    const { coerceErrorCode } = await import('../../packages/core/src/events/to-wire-record.js');
+    const r = normalizeClaudeTurn([{ type: 'result', subtype: 'error_some_future_variant', usage: {} }] as never[], { durationMs: 1 });
+    expect(r.errorCode).toBe('sdk_error_some_future_variant');
+    expect(ErrorCodeSchema.safeParse(r.errorCode).success).toBe(false);
+    expect(coerceErrorCode(r.errorCode!)).toBe('other');
   });
 });

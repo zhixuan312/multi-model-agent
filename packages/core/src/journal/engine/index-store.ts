@@ -3,11 +3,9 @@ import { mkdir, readFile, stat } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import type { StatementSync } from 'node:sqlite';
-import { rrfSearch } from './search.js';
 import type {
   CorpusAdapter,
   IndexHealth,
-  LexicalHit,
   StoredRecord,
   StoredRecordMeta,
 } from './types.js';
@@ -136,7 +134,6 @@ export class CorpusIndex {
    */
   private allRecordsStmt?: StatementSync;
   private allRecordsMetaStmt?: StatementSync;
-  private lexicalSearchStmt?: StatementSync;
   private recordCountStmt?: StatementSync;
   /** Cached by `IN` placeholder count for targeted post-ranking body reads. */
   private readonly recordsByIdsStmts = new Map<number, StatementSync>();
@@ -337,11 +334,13 @@ export class CorpusIndex {
   /**
    * Indexed record count — a single cheap `SELECT count(*)`.
    *
-   * Public because adapters need a freshness comparison that does NOT load the
-   * corpus. A derived index loses its value when the freshness check costs more
-   * than the read it protects.
+   * Private: the freshness comparison in {@link ensureFreshRecords} is its only caller, and
+   * nothing outside this class has ever asked the index how many records it holds. (It was public
+   * for adapters that needed a freshness check which does not load the corpus; the check moved
+   * in here, and the old docstring explaining the public-ness outlived it by one audit pass —
+   * left stacked above its own replacement.)
    */
-  recordCount(): number {
+  private recordCount(): number {
     if (!this.recordCountStmt) {
       this.recordCountStmt = this.db.prepare('SELECT count(*) AS n FROM records');
     }
@@ -422,7 +421,6 @@ export class CorpusIndex {
   private invalidateRecordStatements(): void {
     this.allRecordsStmt = undefined;
     this.allRecordsMetaStmt = undefined;
-    this.lexicalSearchStmt = undefined;
     this.recordCountStmt = undefined;
     this.recordsByIdsStmts.clear();
     this.recordsMetaByIdsStmts.clear();
@@ -796,9 +794,9 @@ export class CorpusIndex {
 
   /**
    * SQL-BOUNDED candidate query: lexical FTS5/BM25 match, joined against
-   * `records` and scoped by an optional exact `topic` equality and
-   * `status != 'superseded'` visibility — both against the real, indexed
-   * columns added in schema version 3 (see {@link ensureSchema}) — capped at
+   * `records` and scoped by an optional exact `topic` equality and an optional `status`
+   * exclusion (the excluded VALUE is the caller's — see `excludeStatus`) — both against the
+   * real, indexed columns added in schema version 3 (see {@link ensureSchema}) — capped at
    * `limit` rows and returned in bm25 order (best match first). This is the
    * query that replaces reading the whole corpus (or a whole topic) into JS
    * and filtering there: every predicate that can run in SQL does, and the
@@ -811,24 +809,35 @@ export class CorpusIndex {
    * tokens can never win any signal regardless of what the candidate pool
    * contains, so there is nothing a query against the database could add.
    */
-  candidateRecordsMeta(opts: { tokens: string[]; topic?: string; includeHistory: boolean; limit: number }): StoredRecordMeta[] {
+  candidateRecordsMeta(opts: {
+    tokens: string[];
+    topic?: string;
+    /** A `status` value to exclude, compared for equality and never interpreted. Omit to
+     *  include every status. This used to be a boolean `includeHistory` with the literal
+     *  `'superseded'` written into the SQL — journal vocabulary inside an engine whose own
+     *  contract says it "only ever compares [status] for equality, never interprets what they
+     *  mean". The adapter owns the word now; the engine owns the comparison. */
+    excludeStatus?: string;
+    limit: number;
+  }): StoredRecordMeta[] {
     const clean = opts.tokens.map((token) => token.replace(/"/g, '').trim()).filter((token) => token.length > 0);
     if (clean.length === 0) return [];
-    const key = `${opts.topic !== undefined ? 1 : 0}:${opts.includeHistory ? 1 : 0}`;
+    const key = `${opts.topic !== undefined ? 1 : 0}:${opts.excludeStatus !== undefined ? 1 : 0}`;
     const match = this.narrowedMatchPattern(clean, opts.limit);
-    const stmt = this.candidateSelectStmt(key, opts.topic !== undefined, opts.includeHistory);
+    const stmt = this.candidateSelectStmt(key, opts.topic !== undefined, opts.excludeStatus !== undefined);
     const bindings: Array<string | number> = [match];
     if (opts.topic !== undefined) bindings.push(opts.topic);
+    if (opts.excludeStatus !== undefined) bindings.push(opts.excludeStatus);
     bindings.push(opts.limit);
     const rows = stmt.all(...bindings) as Array<Record<string, unknown>>;
     return rows.map((row) => toStoredRecord(row, false) as StoredRecordMeta);
   }
 
-  private candidateSelectStmt(key: string, hasTopic: boolean, includeHistory: boolean): StatementSync {
+  private candidateSelectStmt(key: string, hasTopic: boolean, hasStatusExclusion: boolean): StatementSync {
     let stmt = this.candidateStmts.get(key);
     if (!stmt) {
       const topicClause = hasTopic ? 'AND r.topic = ?' : '';
-      const statusClause = includeHistory ? '' : `AND r.status != 'superseded'`;
+      const statusClause = hasStatusExclusion ? 'AND r.status != ?' : '';
       stmt = this.db.prepare(
         `SELECT r.id, r.path, r.title, r.mtime_ms, r.content_hash, r.topic, r.status, r.adapter_meta
          FROM records r
@@ -925,38 +934,6 @@ export class CorpusIndex {
       kept.push(token);
     }
     return kept.map((token) => `"${token}"`).join(' OR ');
-  }
-
-  /**
-   * FTS5/BM25 lexical probe. `queryTokens` are OR-joined and phrase-quoted so
-   * FTS operators embedded in record text stay inert. Returns record ids
-   * best-first (lowest bm25). Empty tokens → empty result.
-   */
-  lexicalSearch(queryTokens: string[]): LexicalHit[] {
-    const clean = queryTokens
-      .map((token) => token.replace(/"/g, '').trim())
-      .filter((token) => token.length > 0);
-    if (clean.length === 0) return [];
-    const match = clean.map((token) => `"${token}"`).join(' OR ');
-    if (!this.lexicalSearchStmt) {
-      this.lexicalSearchStmt = this.db.prepare(
-        `SELECT id, bm25(records_fts) AS bm25 FROM records_fts
-         WHERE records_fts MATCH ? ORDER BY bm25`,
-      );
-    }
-    const rows = this.lexicalSearchStmt.all(match) as Array<Record<string, unknown>>;
-    return rows.map((row) => ({ id: asString(row.id), bm25: asNumber(row.bm25) }));
-  }
-
-  /**
-   * Rank a candidate pool (or, when omitted, every indexed record) against
-   * `tokens` by fusing lexical search with the adapter's own ranked signals
-   * via Reciprocal Rank Fusion. Returns full records, best-first. Does not
-   * itself run freshness/health checks — callers that need up-to-date results
-   * call {@link ensureHealthy} / {@link ensureFresh} first.
-   */
-  async search(tokens: string[], opts?: { pool?: string[] }): Promise<StoredRecord[]> {
-    return rrfSearch(this, this.adapter, tokens, opts?.pool);
   }
 
   /** Reflected schema table list (for health/diagnostics tests). */

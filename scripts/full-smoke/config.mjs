@@ -1,8 +1,16 @@
-// Full-pipeline smoke — pinned constants. All values confirmed against the codebase
-// (events_raw migrations, wire-schema, telemetry paths) on 2026-06-12.
+// Full-pipeline smoke — pinned constants (events_raw migrations, wire-schema, telemetry paths).
+// These are pins against the live codebase, so a drift here fails the run rather than passing
+// quietly; re-confirm them whenever a migration or the wire schema moves.
 //
-// Comprehensive product release gate: 50 scenarios, each testing a DISTINCT product
-// capability — no duplicates, every scenario earns its place. Full functional coverage:
+// Comprehensive product release gate. Every scenario tests a DISTINCT product capability — no
+// duplicates, every scenario earns its place. Two suites make up a run:
+//   - the numeric `SCENARIOS` array below, covering the EXECUTION routes;
+//   - `record-surface.mjs`, covering the Initiative Record surface (lifecycle, methods, intake,
+//     delivery), which the numeric array never touches.
+// Counts are not restated here — they drift, and a header that miscounts is worse than one that
+// does not count. The harness reports the real totals for both suites at the end of a run.
+//
+// Full functional coverage:
 //   - the deliverable-agnostic solution lifecycle: a digest-matched ApprovedContract
 //     accepted on a governed route, a Contract Task that declares NO deterministic check
 //     (the shape every non-code deliverable needs), `method: 'software-change@1'` reaching
@@ -11,7 +19,16 @@
 //     infeasibility at the filesystem boundary, and an unregistered Method identifier).
 //   - ALL 12 task types (audit, investigate, delegate, execute_plan, review, debug,
 //     research, journal_recall, journal_record, orchestrate, spec, plan) + the
-//     context-blocks control op — every dispatchable route is exercised.
+//     context-blocks control op, and every product HTTP route + every MCP tool.
+//     Those three claims are no longer self-reported: `tests/contract/
+//     smoke-covers-product-surface.test.ts` derives each surface from the code and fails
+//     when one grows without a scenario. It found this sentence already false —
+//     `POST /configure-provider` was exercised by nothing (now #60, the validation path only:
+//     a valid body would rewrite the operator's ~/.mma/config.json).
+//
+//   NOT yet comprehensive, stated plainly rather than implied away: the Initiative Record
+//   surface is 71 registered operations and `record-surface.mjs` exercises 23 of them (32%).
+//   The same test ratchets that number so it can only rise, and prints the uncovered names.
 //   - audit subtypes (default/spec/plan/skill), tier + review-policy overrides,
 //     session reuse, sandbox confinement (cwd-only escape/cd-chain, read-only),
 //     caller-owned branches (the engine commits in place and creates NO branch/worktree),
@@ -41,7 +58,12 @@ export const QUEUE_FILE = process.env.SMOKE_QUEUE_FILE || join(HOME_MM, 'telemet
 export const IDENTITY_FILE = join(HOME_MM, 'identity.json');
 export const DIAG_DIR = process.env.MMA_LOG_DIR || join(HOME_MM, 'logs'); // mma-YYYY-MM-DD.jsonl
 
-export const SCHEMA_VERSION = 6; // packages/core/src/events/wire-schema.ts
+// Re-exported from the module that DEFINES it, not restated. The pinned literal had been `6`
+// while `wire-schema.ts` said `7` since the 6.10.0 telemetry work — so the one check that reads it
+// was comparing every event against a version the engine had stopped emitting. The harness already
+// imports from `packages/core/dist` in three other places; `./events/wire-schema.js` is a published
+// subpath, so this needs no new build step.
+export { SCHEMA_VERSION } from '../../packages/core/dist/events/wire-schema.js';
 
 export const CONFIG_FILE = join(HOME_MM, 'config.json');
 
@@ -95,7 +117,7 @@ export const POLL = {
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
-// The 43-scenario release gate.
+// The release gate. (No count here — it drifts; the harness reports the real total per run.)
 //
 // Each scenario tests a DISTINCT product capability:
 //
@@ -125,16 +147,20 @@ export const POLL = {
 //      #16 investigate resume — resume prior session from scenario #2
 //
 //   E. Error Cases:
-//      #17 invalid type     — POST /task with type: 'nonexistent' → 400
-//      #18 missing field    — POST /task with type: 'investigate' but no prompt/target → 400
+//      #17 invalid type     — POST /execution with type: 'nonexistent' → 400
+//      #18 missing field    — POST /execution with type: 'investigate' but no prompt/target → 400
 //
 //   F. Sandbox Confinement:
-//      #20 delegate cwd-escape  — worker instructed to write /tmp; hook denies, worker adapts
-//      #21 delegate cd-chain    — worker instructed to cd /tmp && touch; hardened hook catches
+//      #20 delegate cwd-escape  — worker told to write ~/.mma/smoke-escape-probe/; hook denies,
+//                                   worker adapts. NOT /tmp: `cwd-only` permits the cwd AND the
+//                                   temp dirs (codex workspace-write parity), and the scenario
+//                                   workspace is itself a mkdtemp dir — so no path under temp can
+//                                   demonstrate confinement.
+//      #21 delegate cd-chain    — worker told to cd into that probe dir && touch; hardened hook catches
 //      #22 audit read-only      — read-only sandbox completes normally without write capability
 //
 //   G. Lifecycle & transports (5.16.0):
-//      #39 cancel  — DELETE /task/:id: 202 requested → still-running poll carries the flag
+//      #39 cancel  — DELETE /execution/:id: 202 requested → still-running poll carries the flag
 //                    → terminal `cancelled` (error.code=aborted, reviewer never ran)
 //      #40 mcp     — POST /mcp: initialize (capabilities) → tools/list → resources/list →
 //                    resources/read → mma_run → mma_task_wait, and the SAME execution polled
@@ -276,7 +302,7 @@ export const SCENARIOS = [
   //    commit — which is exactly what happened to this repo during development.
   { id: 38, type: 'delegate', tier: 'standard', kind: 'write', reviewPolicy: 'none', noopWrite: true, dirtyRepo: true, emits: 1 },
 
-  // O. Cooperative cancellation (5.16.0) — DELETE /task/:taskId.
+  // O. Cooperative cancellation (5.16.0) — DELETE /execution/:executionId.
   //    Cancellation is REQUESTED, not instantaneous: the 202 acknowledges intent and the
   //    task keeps running until the runner confirms termination, so #39 asserts the whole
   //    wire lifecycle — 202 { cancellationRequested }, a poll that still reports running
@@ -405,4 +431,7 @@ export const SCENARIOS = [
   //       is that an admitted task remains DISCOVERABLE afterwards, so a caller can reconcile
   //       instead of guessing. That is what this asserts.
   { id: 59, type: 'investigate', tier: 'standard', kind: 'client-timeout', emits: 0 },
+  // POST /configure-provider — validation contract only; a valid body would rewrite the
+  // operator's ~/.mma/config.json.
+  { id: 60, type: 'error_configure_provider_invalid', kind: 'error', expectStatus: 400, emits: 0 },
 ];

@@ -5,13 +5,18 @@ import { randomUUID } from 'node:crypto';
 import { unlink } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { writeFileSync, mkdtempSync } from 'node:fs';
+import { rmSync, writeFileSync, mkdtempSync } from 'node:fs';
 import { DatabaseSync } from 'node:sqlite';
 import type { MultiModelConfig, Provider } from '@zhixuan92/multi-model-agent-core';
-import { __setCoreTestProviderOverride, __setCoreTestProviderOverrideMap } from '@zhixuan92/multi-model-agent-core';
+// Imported from the SOURCE module, not the package barrel. These are test seams, and this repo
+// keeps a seam out of the barrel so it never becomes part of the published api surface — the same
+// rule `clearSkillCache` and the initiative store's `*ForTest` resolvers already follow.
+import {
+  __setCoreTestProviderOverride,
+  __setCoreTestProviderOverrideMap,
+} from '../../../packages/core/src/providers/provider-factory.js';
 import { startServer, type RunningServer } from '@zhixuan92/multi-model-agent/server';
 
-import { freezeClock } from './deterministic-clock.js';
 
 /** One `ExecutionStore` outbox row, as read directly off `<stateDir>/executions.db` by
  *  `HarnessHandle.unconsumedOutbox()` (SPEC-003 Task I-6) — read-only, test-assertion shape. */
@@ -43,11 +48,13 @@ export interface HarnessHandle {
    *  before/after deep-equal assertions that a rejected or no-op Initiative Record mutation
    *  left every table byte-for-byte unchanged (not just row counts). Opens its own short-lived
    *  `DatabaseSync` connection, mirroring `unconsumedOutbox()`/`executionRowCount()`. Returns
-   *  `SELECT * FROM <table> ORDER BY rowid` for each of the nine Initiative Record tables,
-   *  keyed by table name: `products`, `workspaces`, `resources`, `initiatives`,
-   *  `initiative_workspace_links`, `requirements`, `acceptance_criteria`, `events`,
-   *  `idempotency_results`. */
+   *  `SELECT * FROM <table> ORDER BY rowid` keyed by table name, for EVERY non-internal table
+   *  the database reports — enumerated from `sqlite_master` rather than from a list here, so a
+   *  table added by a later migration is covered without anyone remembering to add it. */
   initiativeRecordSnapshot(): Record<string, unknown[]>;
+  /** Directory the daemon's JSONL diagnostics are written to when `boot({ diagnosticsLog: true })`.
+   *  Always a fresh temp dir, so a test can read back exactly what THIS server emitted. */
+  logDir: string;
   /** Stops the running server and starts a fresh one over the SAME `stateDir` — `executions.db`
    *  and `initiatives.db` persist across the call, and boot reconciliation (including outbox
    *  replay) runs against the reopened stores (SPEC-003 Task I-6). Returns a NEW handle sharing
@@ -74,6 +81,17 @@ export interface BootOptions {
    *  `execution://<id>` locator) — and throwing once. A subsequent replay attempt (a later
    *  terminal write, or boot reconciliation after `restart()`) is unaffected. Default false. */
   failLinkerOnceAfterTerminal?: boolean;
+  /** Overrides for `server.limits`. Added so a test can prove a limit is READ FROM CONFIG
+   *  rather than hardcoded somewhere downstream — the default values are large enough that
+   *  every cap looks enforced whether or not it is actually wired. */
+  limits?: Partial<{
+    maxBodyBytes: number;
+    batchTtlMs: number;
+    projectCap: number;
+    maxContextBlockBytes: number;
+    maxContextBlocksPerProject: number;
+    shutdownDrainMs: number;
+  }>;
 }
 
 function installLoopbackOnlyFetch(): void {
@@ -94,7 +112,13 @@ function installLoopbackOnlyFetch(): void {
 
 export async function boot(opts: BootOptions): Promise<HarnessHandle> {
   installLoopbackOnlyFetch();
-  freezeClock();
+  // No clock freeze here. A `freezeClock()` call used to sit on this line, from a
+  // `deterministic-clock.ts` fixture whose header said it "Replaces `Date.now()` and
+  // `crypto.randomUUID()` so goldens stay stable". It replaced neither — it assigned two
+  // module-local variables that only its own unused `currentMs()` / `nextId()` read — so the
+  // determinism it advertised never existed, and the goldens have been stable on the real clock
+  // all along. The module is gone; anything here that needs a fixed time should say so and use
+  // vitest's fake timers.
   process.env.MMA_TEST_INTROSPECTION = '1';
   process.env.MMA_TEST_PROVIDER_OVERRIDE = '1';
   __setCoreTestProviderOverride(opts.provider);
@@ -139,6 +163,15 @@ export async function boot(opts: BootOptions): Promise<HarnessHandle> {
     },
     diagnostics: {
       log: opts.diagnosticsLog ?? false,
+      // ALWAYS a temp directory, never `~/.mma/logs`. `LogWriter` falls back to the user's real
+      // home when `logDir` is absent, so the `diagnosticsLog` seam could not be used without
+      // writing into it — which is why nothing used it, and why the observability contract test
+      // hand-built its entries instead of reading what the daemon emitted.
+      logDir: mkdtempSync(join(tmpdir(), 'mma-test-logs-')),
+    },
+    research: {
+      brave: { apiKeys: [], timeoutMs: 8000, maxResultsPerQuery: 20, perCallBackoffMs: 250, minPerKeyIntervalMs: 1100 },
+      builtinAdapters: { arxiv: true, semanticScholar: true, githubSearch: true, openalex: true, crossref: true, pubmed: true },
     },
     server: {
       bind: '127.0.0.1',
@@ -151,6 +184,7 @@ export async function boot(opts: BootOptions): Promise<HarnessHandle> {
         maxContextBlockBytes: 524_288,
         maxContextBlocksPerProject: 32,
         shutdownDrainMs: 30_000,
+        ...opts.limits,
       },
       autoUpdateSkills: false,
       // Isolated per-process state dir — server tests must never touch the
@@ -188,24 +222,25 @@ export async function boot(opts: BootOptions): Promise<HarnessHandle> {
     }
   }
 
-  const INITIATIVE_RECORD_SNAPSHOT_TABLES = [
-    'products',
-    'workspaces',
-    'resources',
-    'initiatives',
-    'initiative_workspace_links',
-    'requirements',
-    'acceptance_criteria',
-    'events',
-    'idempotency_results',
-  ] as const;
-
   function initiativeRecordSnapshot(): Record<string, unknown[]> {
     const db = new DatabaseSync(join(config.server.stateDir, 'initiatives.db'));
     try {
+      // Tables read from the database, not from a list kept here.
+      //
+      // A nine-name literal used to stand in this spot, under a doc comment promising "every
+      // table byte-for-byte unchanged (not just row counts)". The schema has grown to
+      // twenty-five: SPEC-003 through SPEC-007 added `tasks`, `decisions`, `risks`, `evidence`,
+      // `verification_runs`, `phase_records`, `lifecycle_contracts`, `methods`, `deliverables`
+      // and more, and none of them were in the list. A rejected mutation that DID write to
+      // `tasks` or `phase_records` left every assertion built on this helper green — which is
+      // precisely the thing the helper exists to rule out. Enumerating is the only version of
+      // this that cannot silently narrow again.
+      const tables = db.prepare(
+        "SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%' ORDER BY name",
+      ).all() as { name: string }[];
       const snapshot: Record<string, unknown[]> = {};
-      for (const table of INITIATIVE_RECORD_SNAPSHOT_TABLES) {
-        snapshot[table] = db.prepare(`SELECT * FROM ${table} ORDER BY rowid`).all();
+      for (const { name } of tables) {
+        snapshot[name] = db.prepare(`SELECT * FROM "${name}" ORDER BY rowid`).all();
       }
       return snapshot;
     } finally {
@@ -217,6 +252,7 @@ export async function boot(opts: BootOptions): Promise<HarnessHandle> {
     return {
       baseUrl: `http://127.0.0.1:${server.port}`,
       token,
+      logDir: config.diagnostics!.logDir!,
       executionRegistry: server.executionRegistry,
       unconsumedOutbox,
       executionRowCount,
@@ -235,6 +271,14 @@ export async function boot(opts: BootOptions): Promise<HarnessHandle> {
         __setCoreTestProviderOverride(null);
         __setCoreTestProviderOverrideMap(null);
         await unlink(tokenPath).catch(() => undefined);
+        // Remove the temp dirs this boot created. They were never cleaned, and every boot makes
+        // two: an isolated logDir and a stateDir holding executions.db + initiatives.db. Measured
+        // on this machine before the fix: 17,985 orphaned log dirs and 64,549 state dirs, ~20 GB.
+        // `restart()` shares this boot's stateDir and its handle's close() is documented as
+        // idempotent, so removing a directory that is already gone must stay silent.
+        for (const dir of [config.diagnostics?.logDir, config.server?.stateDir]) {
+          if (dir) { try { rmSync(dir, { recursive: true, force: true }); } catch { /* best effort */ } }
+        }
       },
     };
   }

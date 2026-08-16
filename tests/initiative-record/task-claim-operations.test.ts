@@ -13,9 +13,9 @@ describe('Task claim operations', () => {
     const dir = mkdtempSync(join(tmpdir(), 'mma-task-claim-'));
     const store = InitiativeRecordStore.open({ dbPath: join(dir, 'initiatives.db') });
     try {
-      const product = store.execute({ operation: 'product_create', input: { name: 'MMA', slug: 'mma' }, expected_revision: 0, provenance });
-      const initiative = store.execute({ operation: 'initiative_create', input: { product_id: product.uuid, title: 'I', goal: 'G', status: 'open', outcome: null }, expected_revision: 0, provenance });
-      const task = store.execute({ operation: 'initiative_task_create', input: { initiative_id: initiative.uuid, title: 'T', goal: 'G', status: 'open', outcome: null, workspace_ids: [], resource_ids: [] }, expected_revision: 0, provenance });
+      const product = store.execute({ operation: 'product_create', input: { name: 'MMA', slug: 'mma' }, expected_revision: 0, provenance }) as { uuid: string };
+      const initiative = store.execute({ operation: 'initiative_create', input: { product_id: product.uuid, title: 'I', goal: 'G', status: 'open', outcome: null }, expected_revision: 0, provenance }) as { uuid: string };
+      const task = store.execute({ operation: 'initiative_task_create', input: { initiative_id: initiative.uuid, title: 'T', goal: 'G', status: 'open', outcome: null, workspace_ids: [], resource_ids: [] }, expected_revision: 0, provenance }) as { uuid: string };
       const claimed = store.execute({ operation: 'initiative_task_claim', input: { uuid: task.uuid }, expected_revision: 0, provenance });
       expect(claimed).toMatchObject({ status: 'claimed', claimed_by: 'host-a', revision: 1 });
       expect(() => store.execute({ operation: 'initiative_task_complete', input: { uuid: task.uuid, outcome: 'succeeded' }, expected_revision: 1, provenance: asHost('host-b') })).toThrow(/task_claim_conflict/);

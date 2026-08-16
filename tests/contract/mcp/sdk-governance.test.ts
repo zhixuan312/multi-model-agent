@@ -1,10 +1,5 @@
 import { readFile } from 'node:fs/promises';
-import {
-  MCP_CAPABILITIES_WITH_APP,
-  MCP_CAPABILITIES_TOOLS_ONLY,
-  resolveMcpCapabilities,
-  MCP_PROTOCOL_VERSION,
-} from '../../../packages/server/src/mcp/tool-surface.js';
+import { MCP_PROTOCOL_VERSION } from '../../../packages/server/src/mcp/tool-surface.js';
 
 describe('contract: MCP SDK governance', () => {
   it('pins the SDK and records the mechanical protocol re-check immediately above the capability exports', async () => {
@@ -18,12 +13,13 @@ describe('contract: MCP SDK governance', () => {
     expect(surface).toMatch(/MCP_CAPABILITIES_TOOLS_ONLY\s*=\s*\{\s*tools:\s*\{\},\s*extensions:\s*\{\},?\s*\}/);
   });
 
-  it('advertises the artifact-dependent capability value — tools-only until a real resource backs it', () => {
+  // The protocol version is governance — it is pinned nowhere else, and it must move only when
+  // the SDK re-check above is redone. What used to sit here alongside it was a second copy of
+  // `resolveMcpCapabilities`'s behaviour, which `capability-resolution.test.ts` already asserts
+  // more strictly (identity via `toBe`, not just structural equality). Two tests of one behaviour
+  // in one directory means the weaker one can pass while the stronger one is the real contract.
+  it('pins the advertised MCP protocol version', () => {
     expect(MCP_PROTOCOL_VERSION).toBe('2025-11-25');
-    expect(resolveMcpCapabilities(false)).toEqual(MCP_CAPABILITIES_TOOLS_ONLY);
-    expect(resolveMcpCapabilities(false)).not.toHaveProperty('resources');
-    expect(resolveMcpCapabilities(true)).toEqual(MCP_CAPABILITIES_WITH_APP);
-    expect(resolveMcpCapabilities(true).extensions).toHaveProperty('io.modelcontextprotocol/ui');
   });
 
   it('preserves the Claude Code HTTP plugin configuration unchanged', async () => {

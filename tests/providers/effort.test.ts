@@ -5,6 +5,7 @@ import { buildCodexCliLaunch } from '../../packages/core/src/providers/codex-cli
 import { makeClaudeProvider } from '../../packages/core/src/providers/claude.js';
 import { createProvider } from '../../packages/core/src/providers/provider-factory.js';
 import type { MultiModelConfig } from '../../packages/core/src/types.js';
+import type { Effort } from '../../packages/core/src/types/task-spec.js';
 
 // Captures the options object handed to the SDK so the claude path can be
 // asserted without a live query.
@@ -122,13 +123,17 @@ describe('claude runner — effort option', () => {
 });
 
 describe('provider factory — effort forwarding', () => {
-  const configWith = (effort?: string): MultiModelConfig => ({
+  // `agents` is the only block `createProvider` reads, and it is fully typed here. The cast
+  // covers the REST of MultiModelConfig, which this test does not exercise — `as never`, which
+  // this used, would also have silenced a mistyped agents block, and a wrong `effort` value is
+  // exactly what these cases exist to catch.
+  const configWith = (effort?: Effort): MultiModelConfig => ({
     agents: {
       standard: { type: 'claude', model: 'claude-sonnet-5', ...(effort && { effort }) },
       complex: { type: 'codex', model: 'gpt-5.6-terra', ...(effort && { effort }) },
       main: { type: 'claude', model: 'claude-opus-5' },
     },
-  } as never);
+  } as Pick<MultiModelConfig, 'agents'> as MultiModelConfig);
 
   it('carries the per-tier override into the provider config', () => {
     expect(createProvider('standard', configWith('low')).config.effort).toBe('low');
@@ -137,5 +142,37 @@ describe('provider factory — effort forwarding', () => {
 
   it('leaves the provider config effort unset when the tier does not override it', () => {
     expect(createProvider('standard', configWith()).config.effort).toBeUndefined();
+  });
+});
+
+/**
+ * The wall-clock guard's arming decision, tested once for both runners.
+ *
+ * `claude-session.ts` and `codex-cli-session.ts` computed this inline, identically, and so
+ * shared one bug: `Math.max(0, deadline - now)` followed by "arm only if > 0" made an ELAPSED
+ * deadline indistinguishable from "no deadline configured", and the turn ran unbounded.
+ * `runTwoPhasePipeline` uses ONE deadline for the whole run, so an implementer that spends the
+ * budget hands the reviewer an elapsed one — leaving the reviewer as the single unbounded stage
+ * of a run that was already over time.
+ *
+ * The two copies are why one fix would not have reached both, so the rule now lives once.
+ */
+describe('wallClockDelayMs', () => {
+  it('returns the time remaining when there is some', async () => {
+    const { wallClockDelayMs } = await import('../../packages/core/src/providers/session-helpers.js');
+    expect(wallClockDelayMs(1_000_500, 1_000_000)).toBe(500);
+  });
+
+  it('returns 0 — NOT null — for a deadline that has already passed', async () => {
+    const { wallClockDelayMs } = await import('../../packages/core/src/providers/session-helpers.js');
+    // 0 fires the guard immediately; null would arm nothing at all. Collapsing the two is the
+    // whole bug.
+    expect(wallClockDelayMs(999_000, 1_000_000)).toBe(0);
+  });
+
+  it('returns null only when no finite limit was set', async () => {
+    const { wallClockDelayMs } = await import('../../packages/core/src/providers/session-helpers.js');
+    expect(wallClockDelayMs(Number.POSITIVE_INFINITY, 1_000_000)).toBeNull();
+    expect(wallClockDelayMs(Number.NaN, 1_000_000)).toBeNull();
   });
 });

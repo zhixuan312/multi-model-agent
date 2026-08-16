@@ -27,30 +27,19 @@ import {
   taskInputSchema,
   type ExecutionRegistry,
   type ApprovedContract,
-  RevisionConflictError,
-  CrossProductWorkspaceLinkError,
-  InitiativeNotFoundError,
   InitiativeInvalidRequestError,
-  MigrationBackupFailedError,
-  CrossInitiativeEvidenceLinkError,
-  CrossInitiativeVerificationError,
-  TaskNotClaimableError,
-  TaskClaimConflictError,
-  InvalidTaskTransitionError,
-  InvalidPhaseTransitionError,
-  UnknownLifecycleContractError,
-  UnknownMethodError,
-  UnknownDeliveryContractError,
-  TargetAdapterValidationFailedError,
+  initiativeOperationRequestSchema,
+  initiativeFieldErrorsFromIssues,
 } from '@zhixuan92/multi-model-agent-core';
 import type { ExecutionRuntime } from '../application/execution-runtime.js';
 import type { ExecutionStore } from '../application/execution-store.js';
 import type { ProjectRegistry } from '../application/project-registry.js';
 import type { InitiativeRecordRuntime } from '../application/initiative-record-runtime.js';
+import { reportInitiativeError } from '../application/initiative-error-report.js';
 import { validateCwd } from '../application/cwd-validator.js';
 import { validateDeliverableContractBoundary } from '../application/deliverable-contract-validator.js';
 import { executionIdentity, buildRunningSnapshot } from '../application/task-identity.js';
-import { createContextBlock, deleteContextBlock } from '../http/handlers/control/context-blocks.js';
+import { createContextBlock, deleteContextBlock } from '../application/context-block-ops.js';
 import { resolveCallerIdentity } from '../http/middleware/caller-identity.js';
 import {
   MCP_TOOLS,
@@ -64,6 +53,7 @@ import {
   DELIVERY_MODES,
   INITIATIVE_MUTATING_OPERATIONS,
   INITIATIVE_EXECUTE_OPERATION_BY_TOOL_NAME,
+  unknownToolArguments,
 } from './tool-surface.js';
 import {
   getExecutionArtifact,
@@ -93,7 +83,7 @@ export interface McpAdapterDeps {
   /** Resolved ONCE at daemon start (see `http/server.ts`); read here for both the
    *  `Server` constructor and the `server/discover` handler so they cannot disagree. */
   capabilities: McpCapabilities;
-  /** Shared with the REST control handlers (`handlers/control/context-blocks.ts`) — the
+  /** Shared with the REST control handlers (`application/context-block-ops.ts`) — the
    *  `mma_context_block_*` tools call the SAME `createContextBlock` / `deleteContextBlock`
    *  operations those handlers wrap, against this same registry. */
   projectRegistry: ProjectRegistry;
@@ -287,7 +277,7 @@ function handleList(deps: McpAdapterDeps, args: Record<string, unknown>): ToolRe
  * mma_context_block_create — validates `cwd` exactly like `handleRun` does (MCP
  * requests carry no cwd of their own), then delegates to the SAME
  * `createContextBlock` operation the REST `POST /context-blocks` handler wraps
- * (`handlers/control/context-blocks.ts`). No body validation, byte-limit, or
+ * (`application/context-block-ops.ts`). No body validation, byte-limit, or
  * cap logic lives here — only argument shuffling and error-shape translation
  * from the operation's discriminated result to an MCP tool error.
  */
@@ -323,84 +313,15 @@ function handleContextBlockDelete(deps: McpAdapterDeps, args: Record<string, unk
 }
 
 /**
- * Maps a runtime-thrown typed Initiative error onto the MCP tool error result —
- * the same typed-error union `http/handlers/initiative-record.ts` maps onto an
- * HTTP status, translated to MCP's `{ code, message, ...details }` shape
- * instead. Anything else (an unclassified storage failure) falls through to
- * `internal_error`, mirroring HTTP's 500 fallback.
+ * MCP shape of a typed Initiative error.
+ *
+ * The classification lives in `application/initiative-error-report.ts`, shared with the HTTP
+ * handler; only the envelope differs. The two used to be parallel `instanceof` chains over the
+ * same eighteen classes and had already drifted on two of them.
  */
 function initiativeErrorToMcp(err: unknown): ToolResult {
-  if (err instanceof RevisionConflictError) {
-    return errorResult(err.code, err.message, {
-      entity_type: err.entity_type,
-      entity_id: err.entity_id,
-      expected_revision: err.expected_revision,
-      actual_revision: err.actual_revision,
-    });
-  }
-  if (err instanceof CrossProductWorkspaceLinkError) {
-    return errorResult(err.code, err.message, { initiative_id: err.initiative_id, workspace_id: err.workspace_id });
-  }
-  if (err instanceof CrossInitiativeEvidenceLinkError) {
-    return errorResult(err.code, err.message, {
-      evidence_id: err.evidence_id,
-      target_type: err.target_type,
-      target_id: err.target_id,
-    });
-  }
-  if (err instanceof CrossInitiativeVerificationError) {
-    return errorResult(err.code, err.message, {
-      initiative_id: err.initiative_id,
-      acceptance_criterion_id: err.acceptance_criterion_id,
-    });
-  }
-  if (err instanceof TaskNotClaimableError) {
-    return errorResult(err.code, err.message, { task_id: err.task_id, status: err.status });
-  }
-  if (err instanceof TaskClaimConflictError) {
-    return errorResult(err.code, err.message, {
-      task_id: err.task_id,
-      claimed_by: err.claimed_by,
-      authorized_by: err.authorized_by,
-    });
-  }
-  if (err instanceof InvalidTaskTransitionError) {
-    return errorResult(err.code, err.message, {
-      task_id: err.task_id,
-      from_status: err.from_status,
-      to_status: err.to_status,
-    });
-  }
-  if (err instanceof InvalidPhaseTransitionError) {
-    return errorResult(err.code, err.message, {
-      initiative_id: err.initiative_id,
-      phase: err.phase,
-      source_state: err.source_state,
-      target_state: err.target_state,
-    });
-  }
-  if (err instanceof UnknownLifecycleContractError) {
-    return errorResult(err.code, err.message, { lifecycle_contract: err.lifecycle_contract });
-  }
-  if (err instanceof UnknownMethodError) {
-    return errorResult(err.code, err.message, { method: err.method });
-  }
-  if (err instanceof UnknownDeliveryContractError) {
-    return errorResult(err.code, err.message, { delivery_contract: err.delivery_contract });
-  }
-  if (err instanceof TargetAdapterValidationFailedError) {
-    return errorResult(err.code, err.message, { target_type: err.target_type });
-  }
-  if (err instanceof InitiativeNotFoundError) {
-    return errorResult(err.code, err.message, { entity_type: err.entity_type, lookup: err.lookup });
-  }
-  if (err instanceof InitiativeInvalidRequestError) {
-    return errorResult(err.code, err.message, { field_errors: err.field_errors });
-  }
-  if (err instanceof MigrationBackupFailedError) {
-    return errorResult(err.code, err.message, { database_path: err.database_path, backup_path: err.backup_path });
-  }
-  return errorResult('internal_error', err instanceof Error ? err.message : 'Unexpected error');
+  const { code, message, details } = reportInitiativeError(err);
+  return errorResult(code, message, details);
 }
 
 /**
@@ -451,7 +372,20 @@ function handleInitiativeExecute(deps: McpAdapterDeps, operation: string, args: 
  */
 function handleInitiativeResume(deps: McpAdapterDeps, args: Record<string, unknown>): ToolResult {
   try {
-    return jsonResult(deps.initiativeRuntime.initiativeResume(args));
+    // Unlike the HTTP body, MCP omits the redundant `operation` because the
+    // tool name selects it. Reconstitute and strictly validate that canonical
+    // envelope before unwrapping `input`, so legacy top-level fields cannot be
+    // silently ignored at this transport boundary.
+    if ('operation' in args) {
+      throw new InitiativeInvalidRequestError({
+        field_errors: { operation: ['operation is selected by the MCP tool name and must not be supplied'] },
+      });
+    }
+    const parsed = initiativeOperationRequestSchema.safeParse({ operation: 'initiative_resume', ...args });
+    if (!parsed.success) {
+      throw new InitiativeInvalidRequestError({ field_errors: initiativeFieldErrorsFromIssues(parsed.error.issues) });
+    }
+    return jsonResult(deps.initiativeRuntime.initiativeResume(parsed.data.input));
   } catch (err) {
     return initiativeErrorToMcp(err);
   }
@@ -462,14 +396,30 @@ function handleInitiativeResume(deps: McpAdapterDeps, args: Record<string, unkno
  * FR-9), alongside `mma_initiative_resume` above. Its advertised tool schema
  * is generated from the `initiative_gate_status` member of
  * `initiativeOperationRequestSchema` (same as every mutating tool), so its
- * wire arguments carry the ordinary `{ input: { initiative } }` shape rather
- * than `initiative_resume`'s flat one — this adapter unwraps `args.input`
+ * wire arguments carry the ordinary `{ input: { initiative } }` shape. This
+ * adapter unwraps `args.input`
  * (the Initiative lookup) and hands ONLY that to the dedicated runtime
  * method, never `execute()`.
  */
 function handleInitiativeGateStatus(deps: McpAdapterDeps, args: Record<string, unknown>): ToolResult {
   try {
     return jsonResult(deps.initiativeRuntime.initiativeGateStatus(args.input));
+  } catch (err) {
+    return initiativeErrorToMcp(err);
+  }
+}
+
+/**
+ * `mma_initiative_export` (MMA Next gap-closure, §15, §21 success criterion 12) — the third
+ * dedicated read, alongside `mma_initiative_resume` and `mma_initiative_gate_status` above. Its
+ * advertised tool schema is generated from the `initiative_export` member of
+ * `initiativeOperationRequestSchema`, so its wire arguments carry the ordinary
+ * `{ input: { initiative } }` shape. This adapter unwraps `args.input` and hands ONLY that to
+ * the dedicated runtime method, never `execute()`.
+ */
+function handleInitiativeExport(deps: McpAdapterDeps, args: Record<string, unknown>): ToolResult {
+  try {
+    return jsonResult(deps.initiativeRuntime.initiativeExport(args.input));
   } catch (err) {
     return initiativeErrorToMcp(err);
   }
@@ -553,11 +503,26 @@ export function buildMcpServer(deps: McpAdapterDeps, declaredClient?: string): S
     const clientName = callerClientFromMeta(request.params._meta as Record<string, unknown> | undefined, declaredClient);
     const toolName = request.params.name;
 
+    // Honour the `additionalProperties: false` every tool schema advertises, once, before
+    // dispatch — the handlers below each read the keys they know and would otherwise ignore
+    // the rest. Naming the offending keys matters: the case this catches is not a nonsense
+    // argument but a near-miss, an option nested one level too high, and "unknown argument"
+    // alone leaves the caller diffing their call against the schema by hand.
+    const unknownArguments = unknownToolArguments(toolName, args);
+    if (unknownArguments.length > 0) {
+      return errorResult(
+        'invalid_request',
+        `${toolName} does not accept ${unknownArguments.map((key) => `\`${key}\``).join(', ')}. `
+        + 'Check the tool schema — an option meant for a nested object is the usual cause.',
+      );
+    }
+
     // Initiative tools: near-identical `mma_<operation>` dispatches over the
     // frozen operation table, checked before the fixed-name switch below rather
     // than added to it as more `case` labels for the same handler body.
     if (toolName === 'mma_initiative_resume') return handleInitiativeResume(deps, args);
     if (toolName === 'mma_initiative_gate_status') return handleInitiativeGateStatus(deps, args);
+    if (toolName === 'mma_initiative_export') return handleInitiativeExport(deps, args);
     const initiativeOperation = INITIATIVE_EXECUTE_OPERATION_BY_TOOL_NAME.get(toolName);
     if (initiativeOperation) return handleInitiativeExecute(deps, initiativeOperation, args);
 
@@ -619,3 +584,7 @@ export async function handleMcpRequest(
   await server.connect(transport);
   await transport.handleRequest(req, res, body);
 }
+
+/** Test seam: see `__initiativeErrorToHttpForTests`. The two mappers cover the same typed-error
+ *  union and must report the same code and details; the parity test needs both. */
+export const __initiativeErrorToMcpForTests = initiativeErrorToMcp;

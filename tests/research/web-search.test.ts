@@ -328,7 +328,7 @@ describe('Brave UA header', () => {
         return { statusCode: 200, data: JSON.stringify({ web: { results: [] } }) };
       });
     const client = new BraveClient({
-      apiKeys: ['k1'], timeoutMs: 5000, maxResultsPerQuery: 5, perCallBackoffMs: 100,
+      apiKeys: ['k1'], timeoutMs: 5000, maxResultsPerQuery: 5, perCallBackoffMs: 100, minPerKeyIntervalMs: 0,
     });
     await client.search('test');
     await agent.close();

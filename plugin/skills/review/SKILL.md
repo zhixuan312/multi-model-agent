@@ -1,7 +1,7 @@
 ---
 name: review
-description: Use when source code needs a quality / security / correctness pass — pre-merge review, post-implementation sanity check, or focused look at a small file set — and the review can run in parallel per file
-when_to_use: User asks for a code review or pre-merge check, OR a review workflow (/review, /security-review) points at one, AND mma is running. Delegate so each file reviews on its own worker; the main agent only decides what to merge. Review on SOURCE CODE — use mma:audit for prose specs / configs.
+description: Use when source code needs a quality / security / correctness pass — pre-merge review, post-implementation sanity check, or focused look at a small file set — over a small file set the worker reads together
+when_to_use: User asks for a code review or pre-merge check, OR a review workflow (/review, /security-review) points at one, AND mma is running. Delegate the reading so the main agent only decides what to merge. Review on SOURCE CODE — use mma:audit for prose specs / configs.
 version: "0.0.0-unreleased"
 ---
 
@@ -11,7 +11,7 @@ version: "0.0.0-unreleased"
 
 mma:review is the **pre-merge gate**. Send code files (or a diff) to a worker for structured review against an executability bar: would a maintainer who reads only the verdict and the diff understand which changes are required, why each is required, and where each lives — well enough to apply the fix and re-merge without re-investigating?
 
-Each file is reviewed independently in parallel; results are index-aligned with `target.paths`.
+All the named files are reviewed in ONE worker pass — there is no per-file fan-out and no per-path result array. `output.summary.findings` is a single list covering the whole set, with each finding naming its own `file`/`line`. Keep the set small for that reason: every file shares one implementer and one reviewer turn.
 
 **Core principle:** Reviewer is a different model from the implementer — different training, different blind spots. Cross-model review catches what self-review misses. The reviewer runs against a 10-category failure-mode taxonomy (test gap, cross-file ripple, missing edge case, race, resource leak, backward-compat break, security/performance regression, implicit-contract assumption, pre-existing-bug-vs-new-regression separation) and weighs every change through the security, performance, and correctness lenses.
 
@@ -32,7 +32,7 @@ Each file is reviewed independently in parallel; results are index-aligned with 
 
 The cross-file ripple pass (changed-symbol → broken caller) only fires when the worker can identify what changed. Two patterns:
 
-- **Diff-as-input (preferred for cross-file ripple)**: pass the diff via the `target.inline` field, plus the named files via `target.paths`. The worker treats the diff as the change-set and greps for callers of changed public symbols.
+- **Diff-as-input (preferred for cross-file ripple)**: register the diff once via `mma:context-blocks` and pass its id in `contextBlockIds`, alongside the changed files in `target.paths`. The worker treats the diff as the change-set and greps for callers of changed public symbols. `target` is exactly-one-of `paths`/`inline` — sending both is rejected with `400 invalid_request` ("target must have exactly one of paths or inline"), so the diff cannot ride in `target.inline` next to the file list.
 - **Files-only (static review)**: pass only `target.paths`. The worker reviews the files in their current state without a change-set, so cross-file ripple is degenerate. Test gap, missing edge case, race, leak, and security/performance findings still fire.
 
 ## Dispatch
@@ -81,7 +81,25 @@ tasks return a handle instead:
 { "executionId": "<uuid>", "type": "<route>", "cwd": "<abs path>" }
 ```
 
-Use `executionId` to poll with `mma_execution_get` / `mma_execution_wait`.
+Use `executionId` to poll with `mma_execution_get`, block with `mma_execution_wait`, or stop the
+work with `mma_execution_cancel`.
+
+### A long dispatch outlives your turn; your polling does not
+
+The execution runs in the mma daemon, not in your session. It keeps going regardless of what your
+side is doing, and its terminal envelope is persisted — `mma_execution_get` returns it later even
+after a daemon restart. **Nothing is lost if you stop watching.**
+
+What stops is your polling. `mma_execution_wait` blocks for at most its timeout and then returns a
+running snapshot; "call again" only happens while your turn is active. Your client is never told
+that an mma execution finished — the execution belongs to the daemon, not to your client's own task
+tracking — so no notification will arrive to bring you back.
+
+For work that outlasts a turn, hand the waiting to something your client DOES track. If it can run
+a command as a tracked background job, wrap the poll in one: a job that blocks until the execution
+is terminal and whose exit your client notices. Completion then re-enters your session instead of
+depending on you still being mid-turn. Without that, a long dispatch looks stalled while it is in
+fact running — and the result is sitting in the store whenever you next ask for it.
 
 ### mma_execution_get / mma_execution_wait — poll
 
@@ -95,7 +113,7 @@ full envelope — these 5 top-level fields:
     "executionId": "<uuid>",
     "type": "<route>",
     "subtype": "<subtype or absent>",
-    "status": "completed | done_with_concerns | failed | cancelled",
+    "status": "done | done_with_concerns | failed | cancelled | interrupted",
     "sessions": { "implementer": "<session-id>", "reviewer": "<session-id or null>" },
     "worktree": null,
     "dirtyAtDispatch": false
@@ -134,6 +152,11 @@ live in a distinct `execution` block (`sessions`, `worktree`, `dirtyAtDispatch`)
 | `error` is `null` | Task succeeded — read `output` |
 | `error` is `{ "code": "...", "message": "..." }` | Task failed — read `error.code` + `error.message` |
 
+`interrupted` is the fifth terminal status: boot reconciliation writes it when a daemon restart
+orthaned a running execution. It carries a non-null `error` with a retryable reason
+(`daemon_restarted`), so Step 1 still reads correctly — but a consumer switching on only the other
+four hits an unhandled state after any restart.
+
 **Step 2 — extract the result from `output.summary`:**
 
 `output.summary` is the **parsed JSON** from the refiner (reviewer). Its internal shape varies by route — see the per-skill "Reading the output" section for the exact fields. Common patterns:
@@ -161,7 +184,9 @@ response.output.summary.findings[i].suggestion  ← fix recommendation (some rou
 
 ```
 response.output.filesChanged       ← array of relative paths modified by the worker
-response.output.contextBlockId     ← non-null for read routes (reusable in contextBlockIds)
+response.output.contextBlockId     ← non-null for READ-ONLY types (audit/review/debug/investigate/
+                                     research/journal_recall); null for spec and plan too, which
+                                     read but are cwd-only (reusable in contextBlockIds)
 ```
 
 **Step 5 — check `output.reviewerNote` (reviewer availability):**
@@ -256,7 +281,7 @@ Self-review and cross-model review are not the same thing. The whole reason to d
 
 ## Terminal context block
 
-Every completed **read-route** task (audit / review / debug / investigate / research) auto-registers a reusable terminal context block containing its report (headline + findings). The block id is returned on the result as **`contextBlockId`**. Write routes (delegate / execute-plan) return `contextBlockId: null` — their record is the commit, not a block. This block is immutable, lives for the session duration, and counts against the project's `maxEntries` quota (default 500).
+Every completed **read-only** task — audit / review / debug / investigate / research / **journal_recall** — auto-registers a reusable terminal context block containing its report (headline + findings). The block id is returned on the result as **`contextBlockId`**. Every other type returns `contextBlockId: null` — including `spec` and `plan`, which read rather than write but are `cwd-only` because they write their document — their record is the commit, not a block. This block is immutable, lives for the session duration, and counts against the project's `server.limits.maxContextBlocksPerProject` quota (default 500).
 
 Use it for delta follow-ups — feed prior results' block ids into a later call's `contextBlockIds`, filtering out nulls:
 

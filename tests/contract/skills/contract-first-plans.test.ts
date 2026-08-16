@@ -1,4 +1,12 @@
 import { describe, it, expect } from 'vitest';
+import {
+  ACCEPTED_CHECK_ROOTS,
+  CONTRACT_BULLET_LABELS,
+  OUTPUT_FIELD_LABEL,
+  DEPENDENCIES_FIELD_LABEL,
+  CHECKS_HEADING_MARKER,
+  PLAN_BOUNDARY_SENTINEL,
+} from '../../../packages/core/src/unified/contract-plan.js';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
@@ -83,10 +91,9 @@ describe('contract-first plan authoring prompts (I-6)', () => {
   });
 
   it('plan/review.md speaks the same deliverable-neutral grammar as the generator, not the retired one', () => {
-    expect(planRev).toContain('**Output:**');
-    expect(planRev).toContain('**Dependencies:**');
-    expect(planRev).toContain('**Plan boundary:** final deliverable content is not in this plan.');
-    expect(planRev).toContain('Checks (plan-authored');
+    // The format literals themselves are asserted against the VALIDATOR's exported constants in
+    // the "one vocabulary" block below, not restated here — restating them is what let the prompt
+    // and the parser drift while this file stayed green.
     // A declared check is optional — the refiner must never fabricate one for an uncheckable task.
     expect(planRev.toLowerCase()).toContain('optional');
     expect(planRev).not.toContain('**Files:**');
@@ -185,5 +192,149 @@ describe('generic implementers stay deliverable-neutral, software technique migr
       expect(() => read(`packages/core/src/skills/${route}/${LEGACY_ASSET_NAME}`)).toThrow();
     }
     expect(read('packages/core/src/methods/software-change/guidance.md')).toContain('Caller tracing');
+  });
+});
+
+/**
+ * The authoring prompts must speak the vocabulary the VALIDATOR parses.
+ *
+ * `skills/plan/{implement,review}.md` tell a worker what to write; `contract-plan.ts` decides
+ * whether what it wrote parses, and rejects a non-conforming plan before any executor starts. The
+ * two were stated independently — and so was the test above meant to protect them, which compares
+ * its own string literal to the prompt's. All three agreed by coincidence: rename
+ * `DEPENDENCIES_FIELD_LABEL` in the validator and every assertion in this file still passes while
+ * the generator emits plans the validator can no longer read. This project has shipped exactly that
+ * class of generator/validator split before.
+ *
+ * These cases import the validator's own constants, so the literals can only ever agree on purpose.
+ */
+describe('plan prompts and the plan validator share one vocabulary', () => {
+  const bothPrompts = [
+    ['plan/implement.md', planImpl],
+    ['plan/review.md', planRev],
+  ] as const;
+
+  it.each(bothPrompts)('%s states the exact plan-boundary sentinel', (_name, text) => {
+    expect(text).toContain(PLAN_BOUNDARY_SENTINEL);
+  });
+
+  it.each(bothPrompts)('%s states the exact Output and Dependencies labels', (_name, text) => {
+    expect(text).toContain(OUTPUT_FIELD_LABEL);
+    expect(text).toContain(DEPENDENCIES_FIELD_LABEL);
+  });
+
+  it.each(bothPrompts)('%s names every Contract bullet the validator requires, in order', (name, text) => {
+    // Order matters to the validator, and a prompt listing them in another order would teach the
+    // worker to write a plan that parses inconsistently.
+    const positions = CONTRACT_BULLET_LABELS.map((label) => {
+      const at = text.indexOf(label);
+      expect(at, `${name} never states the Contract bullet "${label}"`).toBeGreaterThanOrEqual(0);
+      return at;
+    });
+    expect(positions, `${name} lists the Contract bullets out of validator order`)
+      .toEqual([...positions].sort((a, b) => a - b));
+  });
+
+  it('the reviewer names the optional declared-checks section by its parsed marker', () => {
+    expect(planRev).toContain(CHECKS_HEADING_MARKER);
+  });
+
+  it('the generator names every check root the validator accepts', () => {
+    // The prompt taught six of the seven; `src/test` was accepted by the validator and mentioned
+    // nowhere, so a Maven-layout deliverable was steered away from its natural location. The
+    // mismatch was benign in direction (the validator accepted a superset, so no plan was
+    // rejected), which is precisely why nothing surfaced it.
+    for (const root of ACCEPTED_CHECK_ROOTS) {
+      expect(planImpl, `plan/implement.md never names the accepted check root "${root}"`)
+        .toContain(`\`${root}\``);
+    }
+  });
+
+  it('the generator emits the task heading shape the validator matches', () => {
+    // Same roman-numeral form as TASK_HEADING_RE (`^###\s+Task\s+[IVXLCDM]+-\d+:`).
+    expect(planImpl).toMatch(/###\s+Task\s+[IVXLCDM]+-(?:N|\d+)\s*:/);
+  });
+});
+
+/**
+ * The task-heading rule must describe the heading the validator accepts.
+ *
+ * `plan/implement.md` said tasks are numbered "`### Task I-N:` — roman-numeral N". `TASK_HEADING_RE`
+ * is `/^###\s+Task\s+[IVXLCDM]+-\d+:/` — the segment after the hyphen must be ARABIC digits. A plan
+ * numbered `### Task I-IV:` matches no heading, so `parseContractPlan` finds zero tasks and throws
+ * `unsupported-legacy-plan`, failing the entire execute_plan before a provider session opens. The
+ * same file states the rule correctly 80 lines later ("roman-`I` + `-N`") and its JSON example uses
+ * `Task I-1`, so the prompt disagreed only with itself in the one place a worker reads first.
+ */
+describe('the plan task-heading rule matches the validator', () => {
+  it('the validator requires arabic digits after the hyphen', () => {
+    const re = /^###\s+Task\s+[IVXLCDM]+-\d+:.*$/gm;
+    expect(re.test('### Task I-4: something')).toBe(true);
+    re.lastIndex = 0;
+    expect(re.test('### Task I-IV: something')).toBe(false);
+  });
+
+  it('the prompt no longer calls N a roman numeral', () => {
+    expect(planImpl).not.toMatch(/roman-numeral N/);
+    expect(planImpl, 'it must say the number is arabic').toMatch(/ARABIC digit/);
+  });
+
+  it('and names the failure a roman number would cause', () => {
+    expect(planImpl).toContain('unsupported-legacy-plan');
+  });
+});
+
+/**
+ * Two smaller defects in the plan pair.
+ *
+ *  - `review.md` told the refiner to fix paths and commands "against Phase-A ground truth". There is
+ *    no Phase A: `implement.md` defines BUILD phases as `## Phase N — <name>` with author-chosen
+ *    numbers, and its authoring procedure is steps 1–5 (step 1 titled "Ground truth"). The
+ *    reviewer's reference point was undefined, so it verified against nothing or invented one.
+ *  - `implement.md` said "Set `verdict` to `executable` for all tasks … `blocked` for BLOCKED
+ *    tasks" — self-contradictory in one sentence, while constraint 7 mandates BLOCKED tasks exist.
+ *    It also never mentioned `partial`, which the schema accepts and `review.md` tells the reviewer
+ *    to preserve, so the reviewer was told to keep a value the producer was never told existed.
+ */
+describe('the plan pair references only things it defines', () => {
+  it('the reviewer points at a step that exists', () => {
+    expect(planRev).not.toMatch(/Phase-A/);
+    expect(planRev, 'it must name the authoring step that establishes ground truth')
+      .toMatch(/ground truth you established in step 1/i);
+  });
+
+  it('the verdict rule is not self-contradictory', () => {
+    expect(planImpl).not.toMatch(/`executable` for all tasks/);
+    expect(planImpl, 'each verdict must have its own condition').toMatch(/`executable` for a task ready to dispatch/);
+  });
+
+  it('every verdict the schema accepts is explained to the producer', () => {
+    const schemas = readFileSync('packages/core/src/unified/refiner-schemas.ts', 'utf8');
+    const verdicts = /verdict: z\.enum\(\[([^\]]*)\]\)/.exec(schemas);
+    expect(verdicts).not.toBeNull();
+    for (const [, value] of verdicts![1].matchAll(/'(\w+)'/g)) {
+      expect(planImpl, `the implementer never mentions the verdict '${value}'`).toContain(value!);
+    }
+  });
+});
+
+/**
+ * Check paths resolve against the SUBMITTED CWD, not the repository root.
+ *
+ * `implement.md` said a declared check "sits under one of tests/… relative to the repository root".
+ * `contract-plan.ts` resolves against the cwd the caller submitted, and its own rejection message
+ * says so ("relative to the submitted cwd"). The two coincide in a single-repo checkout and diverge
+ * in exactly the setup this workspace uses — a parent directory over sibling repos — where a plan
+ * written to the doc's rule puts its check somewhere the validator will not accept.
+ */
+describe('the check-path base is the submitted cwd', () => {
+  it('the prompt says cwd, not repository root', () => {
+    expect(planImpl).not.toMatch(/relative to the repository root/);
+    expect(planImpl).toMatch(/relative to the SUBMITTED CWD/);
+  });
+
+  it('the validator agrees', () => {
+    const validator = readFileSync('packages/core/src/unified/contract-plan.ts', 'utf8');
+    expect(validator).toMatch(/relative to the submitted cwd/);
   });
 });

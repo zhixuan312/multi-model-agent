@@ -38,7 +38,10 @@ export async function runJournalReindex(opts: JournalReindexOptions): Promise<nu
     // Recover a missing/corrupt index.db, then fully re-derive from node files.
     await store.ensureHealthy();
     await store.rebuildIndex();
-    const nodeCount = store.allDocuments().length;
+    // `allDocumentsMeta`, not `allDocuments`: a COUNT needs no bodies, and `allDocuments`
+    // materializes every node's full text to produce one number. On a large journal that is the
+    // whole corpus read into memory and discarded.
+    const nodeCount = store.allDocumentsMeta().length;
 
     let catalogNote = '';
     if (opts.regenerateCatalog) {

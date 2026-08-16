@@ -63,7 +63,7 @@ Size the decomposition so a human could execute it:
 
 ### The Contract Task shape
 
-Each task MUST follow this exact structure (tasks are numbered `### Task I-N:` — roman-numeral N —
+Each task MUST follow this exact structure (tasks are numbered `### Task I-N:` — a literal roman `I`, a hyphen, then N as an ARABIC digit: `I-1`, `I-2`, … Writing the number itself in roman (`I-IV`) makes the plan unparseable and fails the whole execute_plan run with `unsupported-legacy-plan` before any worker starts —
 regardless of phase, so the executor can select them). No task names an implementation file and no
 task carries final deliverable content — `**Output:**` names WHAT the task produces (a path, an
 artifact name, or a plain description), never HOW:
@@ -154,6 +154,23 @@ these formats EXACTLY, or the renderer mis-parses (collapses phases, drops the o
   Keep any declared check's `Check:` path a NEW dedicated destination — never the path named in
   `**Output:**`, which is the deliverable itself, not a check artifact.
 
+### Close the plan with a full-suite gate
+
+End the plan with a section headed exactly `## Full-suite gate`, listing the commands or checks that
+must pass at EVERY task boundary — the project's own build, typecheck, test and lint entry points as
+they actually exist in the target (do not invent commands; read the manifest or the existing docs and
+name the real ones).
+
+Per-task checks prove the task did its own job. They cannot prove the task left the rest of the
+project working, and that is the failure a plan executed task-by-task actually produces: each check
+green, the suite red. State the gate once, at the end, so an executor knows what must hold after
+every task rather than only after the last one.
+
+When the target genuinely has no suite to run — a document, a workflow configuration, a deliverable
+with no build — say so in that section in one line and name what stands in for it (a re-read, a
+schema validation, a human review). The section is never omitted; a plan that cannot state its gate
+has not decided how anyone will know it still works.
+
 ## Constraints
 
 1. **No implementation code and no final deliverable content in the plan.** A task's closing line is
@@ -165,8 +182,8 @@ these formats EXACTLY, or the renderer mis-parses (collapses phases, drops the o
 4. **Every `Run:` command** uses the project's real check runner and is a whitespace-delimited argv
    with **no shell metacharacters** (`| & ; < > $ \` ( )` or quotes).
 5. **Each declared check's `Check:` path is a NEW dedicated file** — never the task's own `**Output:**`
-   path — and it sits under one of `tests`, `test`, `spec`, `specs`, `checks`, `__tests__`, relative to
-   the repository root. For a non-code deliverable use `checks/`; a directory named `tests` is the
+   path — and it sits under one of `tests`, `test`, `spec`, `specs`, `checks`, `__tests__`, `src/test`,
+   relative to the SUBMITTED CWD — which is the directory execute_plan runs in, not necessarily the repository root (in a multi-repo workspace they differ, and the validator's own error says "relative to the submitted cwd"). For a non-code deliverable use `checks/`; a directory named `tests` is the
    wrong word for a check that reconciles figures against a source ledger. A task with no deterministic check declares no Checks section at all; that is not an error.
 6. **Human-executable phases and granularity** as above.
 7. **Conditional tasks** depending on an external prerequisite are marked BLOCKED with the unblocking
@@ -225,5 +242,7 @@ After writing the plan file, your FINAL text response must be exactly one JSON b
 {"planPath": "<path>", "taskCount": 8, "tasks": [{"title": "Task I-1: ...", "verdict": "executable"}], "notes": "Ground truth + traceability notes."}
 ```
 
-Set `verdict` to `executable` for all tasks (the reviewer downgrades if verification fails); `blocked`
-for BLOCKED tasks.
+Set `verdict` per task: `executable` for a task ready to dispatch, `blocked` for one you marked
+BLOCKED on an external prerequisite (constraint 7). The schema also accepts `partial` — the reviewer
+uses it when codebase verification leaves a task ambiguous — so you will not normally emit it, but
+it is not an invalid value. The reviewer downgrades an `executable` whose verification fails.

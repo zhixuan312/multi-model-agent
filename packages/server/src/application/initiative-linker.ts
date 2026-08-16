@@ -172,6 +172,28 @@ function readPersistedCommitSha(envelope: unknown): string | null {
   return typeof sha === 'string' && sha.length > 0 ? sha : null;
 }
 
+/**
+ * The commit SHA to record as Evidence for this replay, or null when there is none to record.
+ *
+ * Everything it needs comes from the persisted terminal envelope — deliberately, and this is the
+ * point of the whole outbox design: an unconsumed row is never pruned at any age, its payload is
+ * documented as bundling everything replay needs "so replay never has to re-read `executions`",
+ * and terminal execution ROWS are pruned on their TTL. Both call sites used to look the task type
+ * up via `store.get(executionId)`, so a row that could not replay promptly (initiatives.db locked,
+ * a crash before the next boot) would find no execution row, silently skip commit Evidence, and
+ * consume itself anyway — leaving the Initiative permanently missing evidence of work that was
+ * committed.
+ *
+ * Both replay paths (Task-scoped and Initiative-only) also carried their own copy of this
+ * three-part condition. One decision, one place.
+ */
+function commitShaForReplay(terminalEnvelope: unknown): string | null {
+  const executionType = (terminalEnvelope as { execution?: { type?: unknown } } | null)?.execution?.type;
+  if (typeof executionType !== 'string' || !isWriteRouteType(executionType)) return null;
+  if (!terminalEnvelopeHasCommit(terminalEnvelope)) return null;
+  return readPersistedCommitSha(terminalEnvelope);
+}
+
 /** SPEC-003 B6 round-3: the three typed errors that mean the Task's LIVE record no longer admits
  *  the historical outcome this outbox row describes — another actor completed, cancelled,
  *  released, or reclaimed the Task since `validateLinkedTask` read it. Anything else (a
@@ -305,10 +327,7 @@ export class InitiativeLinker {
     // commit. A write route that made no commit must not attribute its pre-existing HEAD as
     // evidence. Best-effort: a non-git target, an Execution that committed nothing, a read-only
     // route, or a pruned execution row all skip this pair without failing the row.
-    const execution = this.store.get(executionId);
-    const commitSha = execution && isWriteRouteType(execution.type) && terminalEnvelopeHasCommit(terminalEnvelope)
-      ? readPersistedCommitSha(terminalEnvelope)
-      : null;
+    const commitSha = commitShaForReplay(terminalEnvelope);
     if (commitSha) {
       const commitEvidence = this.runtime.execute({
         operation: 'evidence_add',
@@ -452,10 +471,7 @@ export class InitiativeLinker {
     // Step 2 (Task-scoped step 3/4's counterpart) — commit Evidence for a write-route Execution
     // that actually landed a commit. Reads the persisted commit-time SHA off the terminal
     // envelope (SPEC-003 B6 defect 2) — never live git state.
-    const execution = this.store.get(executionId);
-    const commitSha = execution && isWriteRouteType(execution.type) && terminalEnvelopeHasCommit(terminalEnvelope)
-      ? readPersistedCommitSha(terminalEnvelope)
-      : null;
+    const commitSha = commitShaForReplay(terminalEnvelope);
     if (commitSha) {
       this.runtime.execute({
         operation: 'evidence_add',

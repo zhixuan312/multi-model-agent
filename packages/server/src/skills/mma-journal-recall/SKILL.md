@@ -48,6 +48,7 @@ is not available in this session, run `mma clients`.
 | `prompt` | string | yes | A conceptual question about prior learnings (min 10 chars). Keep this natural-language, not a keyword list. |
 | `topic` | string | no | Optional lowercase-kebab topic filter. Use it when you already know the primary subject and want recall to narrow that slice first. |
 | `contextBlockIds` | string[] | no | IDs from `mma-context-blocks` (max 2) — enables follow-up / delta recall |
+| `includeHistory` | boolean | no | Default `false`, which EXCLUDES superseded nodes. Set `true` when the reversal is the point — "did we try this and drop it?", "why did we move off X?" — because a superseded learning is exactly the record of a decision that was undone, and by default recall hides it. |
 
 > Worker tier defaults to `complex`. Send `agentTier` to override if needed.
 
@@ -88,9 +89,9 @@ Keep the question conceptual. `topic` scopes the search; `prompt` tells the work
 
 ## Terminal context block
 
-Every completed **read-route** task (audit / review / debug / investigate / recall / research) auto-registers a reusable terminal context block containing its report (headline + findings). The block id is returned on the result as **`contextBlockId`**. Write routes (delegate / execute-plan / journal-record) return `contextBlockId: null` — their record is the commit, not a block.
+Every completed **read-only** task — audit / review / debug / investigate / research / **journal_recall** — auto-registers a reusable terminal context block containing its report (headline + findings). The block id is returned on the result as **`contextBlockId`**. Write routes (delegate / execute-plan / journal-record) return `contextBlockId: null` — their record is the commit, not a block.
 
-Use it for delta follow-ups — feed prior results' block ids into a later call's `contextBlockIds`, filtering out nulls:
+Use it for delta follow-ups — feed prior results' block ids into a later call's `contextBlockIds`, filtering out nulls. Note what that filter drops: `spec` and `plan` read rather than write, but they are `cwd-only` because they write their document, so they return `contextBlockId: null` and chaining a plan result by block id silently yields nothing:
 
     contextBlockIds: priorResults.map(r => r.contextBlockId).filter((id) => id !== null)
 
@@ -101,7 +102,7 @@ Use it for delta follow-ups — feed prior results' block ids into a later call'
 
 The block is registered server-side at task completion; no caller action is needed to create it. Delete it explicitly via `DELETE /context-blocks/:id` when no longer needed, or let it expire on session teardown.
 
-## Interpreting the result
+## Outcome semantics
 
 **Success vs failure:** Check `error` in the terminal envelope. `error === null` means the task succeeded — read `output.summary`. `error !== null` (with `code` + `message`) means it failed.
 

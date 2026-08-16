@@ -5,11 +5,12 @@ export interface ProjectContext {
   readonly contextBlocks: ContextBlockStore;
   readonly createdAt: number;
   lastActivityAt: number;
-  pendingReservations: number;
 }
 
 export interface CreateProjectContextOptions {
   contextBlockStore?: ContextBlockStore;
+  /** LRU bound for this project's blocks. Omitted, the store keeps its own default. */
+  maxContextBlocks?: number;
 }
 
 export function createProjectContext(
@@ -19,9 +20,12 @@ export function createProjectContext(
   const now = Date.now();
   return {
     cwd,
-    contextBlocks: opts.contextBlockStore ?? new InMemoryContextBlockStore(),
+    contextBlocks:
+      opts.contextBlockStore ??
+      new InMemoryContextBlockStore(
+        opts.maxContextBlocks !== undefined ? { maxEntries: opts.maxContextBlocks } : {},
+      ),
     createdAt: now,
     lastActivityAt: now,
-    pendingReservations: 0,
   };
 }

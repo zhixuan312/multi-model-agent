@@ -1,6 +1,6 @@
 import { request } from 'undici';
 import { USER_AGENT } from '../user-agent.js';
-import type { AdapterResult } from './types.js';
+import { RESEARCH_HTTP_TIMEOUT_MS, type AdapterResult } from './types.js';
 
 export interface GitHubOpts {
   kind: 'repo' | 'code';
@@ -43,7 +43,21 @@ export async function githubSearch(query: string, opts: GitHubOpts): Promise<Ada
   };
   if (opts.pat && opts.pat.length > 0) headers['authorization'] = `Bearer ${opts.pat}`;
 
-  const res = await request(url.toString(), { method: 'GET', headers });
+  // See the note in `arxiv.ts`: the orchestrator's timeout races the promise rather than
+  // cancelling the request, so an unresponsive endpoint leaked the socket without this.
+  const ac = new AbortController();
+  const timer = setTimeout(() => ac.abort(), RESEARCH_HTTP_TIMEOUT_MS);
+  let res;
+  try {
+    res = await request(url.toString(), { method: 'GET', headers, signal: ac.signal });
+  } catch (err) {
+    clearTimeout(timer);
+    if ((err as Error).name === 'AbortError' || (err as { code?: string }).code === 'UND_ERR_ABORTED') {
+      throw new Error(`github_timeout: request exceeded ${RESEARCH_HTTP_TIMEOUT_MS}ms`);
+    }
+    throw err;
+  }
+  clearTimeout(timer);
 
   if (res.statusCode === 403) {
     const remaining = res.headers['x-ratelimit-remaining'];

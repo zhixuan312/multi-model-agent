@@ -32,7 +32,7 @@ describe('toWireRecord', () => {
       toolMode: 'full',
       implementerModel: 'claude-sonnet-4-6',
       implementerTier: 'standard',
-      mainModelFamily: 'claude',
+      mainModelFamily: 'claude' as const,
     });
     expect(() => ValidatedTaskCompletedEventSchema.parse(wire)).not.toThrow();
     expect(wire.filesWrittenCount).toBe(2);
@@ -62,7 +62,7 @@ describe('toWireRecord', () => {
       toolMode: 'full',
       implementerModel: 'claude-haiku-4-5',
       implementerTier: 'standard',
-      mainModelFamily: 'claude',
+      mainModelFamily: 'claude' as const,
     });
     // claude-opus-4-7 rate card: input $5/M, output $25/M, cachedRead $0.50/M, cachedNonRead $6.25/M
     // mainCost = (10000 * 5 + 1000 * 25 + 5000 * 0.50 + 0 * 6.25) / 1e6 = 0.0775
@@ -88,7 +88,7 @@ describe('toWireRecord', () => {
     s.seal({ status: 'done', stopReason: 'normal', realFilesChanged: [] });
     const wire = toWireRecord(s.snapshot(), {
       toolMode: 'full',
-      implementerModel: 'claude-haiku-4-5', implementerTier: 'standard', mainModelFamily: 'claude',
+      implementerModel: 'claude-haiku-4-5', implementerTier: 'standard', mainModelFamily: 'claude' as const,
     });
     const perStageSum = wire.stages.reduce(
       (acc, st) => acc + ((st as { mainCostUSD: number | null }).mainCostUSD ?? 0),
@@ -147,5 +147,37 @@ describe('toWireRecord', () => {
     // so it IS present on the wire. The PII rule is: no finding *text* leaks.
     expect(json).not.toContain('"claim"');
     expect(json).not.toContain('"evidence"');
+  });
+});
+
+/**
+ * A main-tier run's usage must survive `toWireRecord`'s own parse.
+ *
+ * `tierUsage` declared only `standard` and `complex` while `agentType` has always allowed
+ * `main` and `orchestrate` runs on that tier by default. Zod strips unknown keys, so the
+ * closing `ValidatedTaskCompletedEventSchema.parse()` silently DELETED the main bucket the
+ * projection had just built: the record reported `agentType: 'main'` with nothing under it.
+ * An `as never` cast on the assignment is what kept the typechecker from saying so.
+ */
+describe('toWireRecord — tier usage covers every tier the record can name', () => {
+  it('keeps a main-tier stage bucket instead of dropping it at the schema boundary', () => {
+    const s = TaskEnvelopeStore.create({ ...seed, agentType: 'main' });
+    s.startStage('implementing', { model: 'claude-opus-4-7', tier: 'main' });
+    s.completeStage('implementing', 1, {
+      outcome: 'advance', durationMs: 10, costUSD: 0.5, turnsUsed: 1,
+      inputTokens: 1000, outputTokens: 100, cachedReadTokens: 50, cachedNonReadTokens: 0,
+    });
+    s.seal({ status: 'done', stopReason: 'normal', realFilesChanged: [] });
+
+    const wire = toWireRecord(s.snapshot(), {
+      toolMode: 'full', implementerModel: 'claude-opus-4-7',
+      implementerTier: 'main', mainModelFamily: 'claude' as const,
+    });
+
+    expect(wire.agentType).toBe('main');
+    const main = (wire.tierUsage as { main?: { model: string; inputTokens: number } }).main;
+    expect(main, 'a run attributed to the main tier must carry that tier\'s usage').toBeDefined();
+    expect(main!.model).toBe('claude-opus-4-7');
+    expect(main!.inputTokens).toBe(1000);
   });
 });

@@ -272,16 +272,30 @@ function deriveRunningOrCancelling(
 }
 
 /**
+ * Every running/cancelling snapshot and every dispatch handle carries at least one of these.
+ * An `{ error: … }` body — what `mcp-adapter.ts`'s `errorResult` returns for an evicted
+ * executionId — carries none, which is what separates "a run, described sparsely" from "not a
+ * run at all".
+ */
+function looksLikeRunningSnapshot(payload: object): boolean {
+  return 'executionId' in payload || 'phase' in payload || 'status' in payload;
+}
+
+/**
  * Derives the render state for a parsed `mma_run`/`mma_execution_get` payload. Throws on a
  * payload that is neither a terminal envelope nor a running/cancelling snapshot — callers
  * (`entry.ts`) catch that and retain the last-known-good state per the update-failed
  * invariant; this function itself stays pure and has no fallback branch of its own.
+ *
+ * That contract was documented but not enforced: the running branch accepted ANY non-null
+ * object, so an error body rendered as a blank `Running` panel with a clock reset to 0.0s and
+ * a live Cancel button — a failed poll shown as a healthy run, forever.
  */
 export function deriveDisplayState(payload: unknown): DisplayState {
   if (isTerminalPayload(payload)) {
     return deriveTerminal(payload);
   }
-  if (typeof payload === 'object' && payload !== null) {
+  if (typeof payload === 'object' && payload !== null && looksLikeRunningSnapshot(payload)) {
     return deriveRunningOrCancelling(payload as RunningSnapshotLike);
   }
   throw new Error('deriveDisplayState: unrecognized payload shape');

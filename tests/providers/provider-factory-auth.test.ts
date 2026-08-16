@@ -52,7 +52,6 @@ describe('provider-factory auth helpers', () => {
     expect(classifyAuthFailure({
       tier: 'complex',
       provider: 'claude',
-      errorCode: 'sdk_execution_error',
       errorMessage: 'No API key found for Anthropic and no OAuth token is available',
     })).toEqual({
       code: 'missing_credentials',
@@ -64,7 +63,6 @@ describe('provider-factory auth helpers', () => {
     expect(classifyAuthFailure({
       tier: 'standard',
       provider: 'codex',
-      errorCode: 'turn_failed',
       errorMessage: '401 Unauthorized: Invalid API key provided',
     })).toEqual({
       code: 'invalid_api_key',
@@ -76,7 +74,6 @@ describe('provider-factory auth helpers', () => {
     expect(classifyAuthFailure({
       tier: 'standard',
       provider: 'codex',
-      errorCode: 'turn_failed',
       errorMessage: 'context window exhausted',
     })).toBeNull();
   });

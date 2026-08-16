@@ -17,7 +17,7 @@ Verify the implementer's code review against the source files, improve quality. 
 
 ## Checks
 
-1. **Taxonomy coverage** — all 10 categories checked? test-gap, cross-file-ripple, pre-existing-vs-regression, missing-edge-case, race/concurrency, resource-leak, backward-compat, security, performance, implicit-contract. Add "no findings" for skipped categories.
+1. **Taxonomy coverage** — all 10 categories checked? verification-gap, cross-reference-ripple, pre-existing-vs-regression, missing-edge-case, ordering-concurrency, resource-cleanup-gap, backward-compat-break, safety-regression, efficiency-regression, implicit-contract. These are the slugs the implementer emits in `criteriaCovered` and in each finding's `category` — use them verbatim; the older code-specific spellings (test-gap, cross-file-ripple, security, performance) are not what it produces.
 
 2. **Evidence quality** — every finding cites real `file:line` with quoted code. Cross-file findings need both change site AND broken caller. Remove findings with fabricated quotes.
 
@@ -25,14 +25,14 @@ Verify the implementer's code review against the source files, improve quality. 
 
 4. **Severity calibration** — critical=data corruption/auth bypass/outage. low=style/naming. Adjust miscalibrated severities.
 
-5. **Scope** — pre-existing bugs go in `preExisting`, not findings. Remove doc/spec issues and off-focus style nits.
+5. **Scope** — pre-existing bugs stay IN `findings`, flagged `preExisting: true`; there is no separate container, and a top-level one is silently dropped by the parser. Remove doc/spec issues and off-focus style nits.
 
 6. **Cross-file work** — cross-file ripple findings backed by call-site references are VALID. Do not downgrade.
 
 ## Constraints
 
 - Remove fabricated-evidence findings. Add missed merge-blocking issues.
-- Move pre-existing bugs to `preExisting`. Correct severities.
+- Flag pre-existing bugs `preExisting: true` rather than deleting them. Correct severities.
 - Update `criteriaCovered` and `findings` to match corrected state. Improve finding wording if you can add clarity.
 
 ## Output

@@ -13,7 +13,12 @@ describe('isLoopbackAddress', () => {
     ['::ffff:127.0.0.1', true],
     ['::ffff:127.0.1.1', true],
     ['localhost', true],
+    // The any-address forms an operator actually types to expose a daemon. `server.bind` is a
+    // free string and `serve` warns on exactly this predicate, so a form wrongly read as loopback
+    // would suppress the one line telling them execution routes are on the network.
     ['0.0.0.0', false],
+    ['::', false],
+    ['::0', false],
     ['192.168.1.1', false],
     ['10.0.0.1', false],
     ['::ffff:192.168.1.1', false],
@@ -51,6 +56,18 @@ describe('isAllowedHostHeader', () => {
     ['127.0.0.1:7337', true],
     ['[::1]', true],
     ['[::1]:7337', true],
+    // Bracketed-host NEGATIVES. The bracketed branch discarded everything after `]` unchecked, so
+    // these were accepted while the unbracketed branch was strict about the same shapes. The table
+    // had two bracketed positives and no negatives, which is why it never noticed.
+    ['[::1]evil.com', false],
+    ['[::1]@evil.com', false],
+    ['[::1]:80/../x', false],
+    ['[::1]:abc', false],
+    ['[::1', false],
+    // Bracketed only: a bare IPv6 literal is malformed in a Host header (RFC 3986 §3.2.2), and
+    // the port-stripping sees its leading colon at index 0. `'::1'` was listed in the allowlist
+    // for a while as if it were accepted; nothing could reach it. Pinned so it is not re-added.
+    ['::1', false],
     ['evil.example.com', false],
     ['evil.example.com:7337', false],
     ['myhostname', false],
@@ -77,7 +94,7 @@ describe('host-header guard wiring in handleRequest', () => {
     loopbackOnlyPaths: new Set(),
     authExemptPaths: new Set(),
     cwdRequiredPaths: new Set(),
-    mainModelRequiredPaths: new Set(),
+    clientRequiredPaths: new Set(),
   };
 
   it('returns 403 forbidden_host when Host header is not an allowed loopback host', async () => {

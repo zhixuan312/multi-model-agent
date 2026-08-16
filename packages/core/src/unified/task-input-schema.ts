@@ -99,15 +99,21 @@ const canonicalJournalRecordSchema = z.object({
   ...commonFields,
 }).strict();
 
-const LEGACY_JOURNAL_RECORD_KEYS = new Set([
+/**
+ * Keys a legacy single-record body may carry — DERIVED from `commonFields`, not retyped.
+ *
+ * This was a hand-written list, and it had already drifted: `method` was added to `commonFields`
+ * by SPEC-005 and added here, while `initiative` was added by SPEC-003 and was not. The effect was
+ * silent and specific — a legacy `{ prompt, topic }` body carrying `method` normalized fine, and
+ * the same body carrying `initiative` fell through to the canonical schema and was rejected with
+ * `unrecognized_keys`, even though linked admission is documented as available on EVERY task type.
+ * Deriving the set means the next field added to `commonFields` is accepted here by construction.
+ */
+const LEGACY_JOURNAL_RECORD_KEYS = new Set<string>([
   'type',
   'prompt',
   'topic',
-  'agentTier',
-  'reviewPolicy',
-  'sessionIds',
-  'contextBlockIds',
-  'method',
+  ...Object.keys(commonFields),
 ]);
 
 /** Boundary normalization: a legacy single-record `journal_record` body
@@ -132,11 +138,13 @@ function normalizeLegacyJournalRecordInput(input: unknown): unknown {
         ...(value.topic !== undefined ? { topic: value.topic } : {}),
       },
     ],
-    ...(value.agentTier !== undefined ? { agentTier: value.agentTier } : {}),
-    ...(value.reviewPolicy !== undefined ? { reviewPolicy: value.reviewPolicy } : {}),
-    ...(value.sessionIds !== undefined ? { sessionIds: value.sessionIds } : {}),
-    ...(value.contextBlockIds !== undefined ? { contextBlockIds: value.contextBlockIds } : {}),
-    ...(value.method !== undefined ? { method: value.method } : {}),
+    // Forwarded GENERICALLY, for the same reason the key set above is derived: a per-field list
+    // here is the second place the same fact was written, and it drifted in exactly the same way.
+    ...Object.fromEntries(
+      Object.keys(commonFields)
+        .filter((key) => value[key] !== undefined)
+        .map((key) => [key, value[key]]),
+    ),
   };
 }
 

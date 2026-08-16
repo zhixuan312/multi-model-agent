@@ -11,7 +11,11 @@ export const journalRecallPreprocessor: Preprocessor = async ({ cwd, payload }) 
   const includeHistory = jrPayload.includeHistory ?? false;
   const indexStore = await JournalIndexStore.open({ journalRoot: path.join(cwd, '.mma', 'journal') });
   try {
-    await indexStore.ensureHealthy();
+    // No `ensureHealthy()` here. `searchCandidatesForRecall` opens with its own
+    // `ensureHealthy()` + `ensureFresh()`, so calling it first made every recall pay the schema
+    // check twice — the exact repeat work the sibling `journal-record` preprocessor documents
+    // removing ("per-record health/freshness was pure repeat work"). Two preprocessors over the
+    // same store should not disagree about who owns the check.
     const result = await searchCandidatesForRecall(indexStore, {
       prompt: jrPayload.prompt, topic: jrPayload.topic, includeHistory,
     });

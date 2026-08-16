@@ -356,10 +356,24 @@ async function journalRetrievalGate() {
   // silently drops, with no shape check able to notice.
   const recallSkill = join(REPO_ROOT, 'packages', 'core', 'src', 'skills', 'journal_recall', 'implement.md');
   const skillText = existsSync(recallSkill) ? readFileSync(recallSkill, 'utf8') : '';
-  for (const marker of ['open that candidate\'s `nodePath` and read the node', 'candidatesWithheld']) {
-    if (!skillText.includes(marker)) {
-      throw new AbortError('journal-retrieval', `journal_recall implement.md missing marker: ${marker}`,
-        'the recall worker must be told to read a cited candidate\'s node, and to state its coverage when candidates were withheld');
+  // Assert the PROPERTY, not a sentence. This used to require the literal string
+  // "open that candidate's `nodePath` and read the node", which broke the moment that instruction
+  // was IMPROVED: the bare value resolves to `<cwd>/nodes/…` and does not exist, so the prompt now
+  // says to read the node at `.mma/journal/<nodePath>` and states that the path is relative to the
+  // journal root. A gate keyed on wording fails an edit that makes the wording correct — and the
+  // fix a reader reaches for is to restore the old, broken sentence.
+  //
+  // What must hold: the worker is told to open a cited candidate's node, told WHERE the path
+  // resolves, and told to report coverage when candidates were withheld.
+  const markers = [
+    [/read the node at `\.mma\/journal\/<nodePath>`/, 'an instruction to open a cited candidate\'s node at the journal root'],
+    [/relative to the JOURNAL ROOT/i, 'a statement of where `nodePath` resolves — the bare value points at nothing'],
+    [/candidatesWithheld/, 'the coverage field for withheld candidates'],
+  ];
+  for (const [pattern, what] of markers) {
+    if (!pattern.test(skillText)) {
+      throw new AbortError('journal-retrieval', `journal_recall implement.md is missing ${what}`,
+        'the recall worker must be told to read a cited candidate\'s node, WHERE that path resolves, and to state its coverage when candidates were withheld');
     }
   }
 }
@@ -595,10 +609,12 @@ function mcpOnlySurfaceGate() {
   // Each pattern is a way an instruction could hand an agent the HTTP route.
   const FORBIDDEN = [
     [/\bcurl\s+-/, 'a curl invocation'],
-    [/POST\s+\/task\b/, 'a POST /task instruction'],
+    // `/execution` as well as `/task`: SPEC-003 renamed the route, and a gate that names only the
+    // retired spelling cannot catch the instruction an author would write today.
+    [/POST\s+\/(task|execution)\b/, 'a POST /task or /execution instruction'],
     [/Authorization:\s*Bearer/i, 'an Authorization: Bearer header'],
-    [/127\.0\.0\.1:\d+\/task\b/, 'a direct /task URL'],
-    [/localhost:\d+\/task\b/, 'a direct /task URL'],
+    [/127\.0\.0\.1:\d+\/(task|execution)\b/, 'a direct route URL'],
+    [/localhost:\d+\/(task|execution)\b/, 'a direct route URL'],
     [/--target=(gemini-cli|codex-cli)\b/, 'a retired client id'],
   ];
 
@@ -636,7 +652,10 @@ function mcpOnlySurfaceGate() {
   // self-enforcing: it holds only while the skill names no MMA tool, so adding a
   // dispatch to an exempt skill fails here. Keep this rule identical to
   // tests/contract/skills/mcp-only-client-surface.test.ts.
-  const callsMmaTool = (text) => /\bmma_(run|task_get|task_wait|task_cancel|task_list|context_block_)/.test(text);
+  // Matches ANY mma_ tool. The old list named task_get/task_wait/task_cancel/task_list, which
+  // SPEC-003 retired — so a skill calling mma_execution_wait (13 such references ship today)
+  // silently stopped being covered by this rule. A generic match cannot go stale that way.
+  const callsMmaTool = (text) => /\bmma_[a-z_]+/.test(text);
   const silent = skillDirs.filter((name) => {
     const p = join(SKILLS_ROOT, name, 'SKILL.md');
     if (!existsSync(p)) return false;
@@ -668,7 +687,20 @@ function mcpOnlySurfaceGate() {
  * answer, and it must report one record per canonical id, never a retired one.
  */
 async function clientRosterGate(token) {
-  const expected = ['claude-code', 'claude-desktop', 'codex', 'antigravity', 'cursor', 'vscode', 'opencode', 'windsurf'];
+  // Derived from the built core, not restated. This gate exists to prove `mma clients` reports the
+  // canonical roster IN CLIENT_IDS ORDER — checking that against a hand-typed copy of CLIENT_IDS
+  // means a ninth client makes the gate ABORT THE SMOKE with a false failure until someone edits
+  // this line. `client-id.ts` opens by saying the attribution surface "derives from CLIENT_IDS
+  // rather than hand-maintaining"; this was the one place that did not.
+  const coreDistForRoster = join(REPO_ROOT, 'packages', 'core', 'dist', 'index.js');
+  if (!existsSync(coreDistForRoster)) {
+    throw new AbortError('client-roster', `no built core at ${coreDistForRoster}`, 'run `npm run build` before the smoke');
+  }
+  const { CLIENT_IDS } = await import(pathToFileURL(coreDistForRoster).href);
+  const expected = [...CLIENT_IDS];
+  if (expected.length === 0) {
+    throw new AbortError('client-roster', 'CLIENT_IDS is empty', 'the roster comparison below would be vacuous');
+  }
 
   const cliPath = join(REPO_ROOT, 'packages', 'server', 'dist', 'cli', 'index.js');
   if (!existsSync(cliPath)) {
@@ -1017,11 +1049,11 @@ export async function preflight({ skipBackend = false, expectBranch = null, allo
   // Backlog F8: a 405 response MUST advertise the supported methods in an Allow
   // header (RFC 7231 §6.5.5), not only in the JSON body.
   {
-    const res = await fetch(`${BASE_URL}/task`, { method: 'DELETE', headers: { Authorization: `Bearer ${token}` } }).catch(() => null);
+    const res = await fetch(`${BASE_URL}/execution`, { method: 'DELETE', headers: { Authorization: `Bearer ${token}` } }).catch(() => null);
     const allow = res ? res.headers.get('allow') : null;
     if (!res || res.status !== 405 || allow !== 'POST') {
       throw new AbortError('405-allow-header',
-        `DELETE /task -> ${res ? res.status : 'no-response'} allow=${allow}`,
+        `DELETE /execution -> ${res ? res.status : 'no-response'} allow=${allow}`,
         'a 405 must set the Allow header to the supported methods (backlog F8)');
     }
   }

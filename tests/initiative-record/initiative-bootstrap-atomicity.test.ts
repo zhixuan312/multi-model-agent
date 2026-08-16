@@ -2,7 +2,8 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it } from 'vitest';
+import { setBootstrapFailureStepForTest } from '../../packages/core/src/initiative-record/sqlite-store.js';
 import { InitiativeRecordStore } from '../../packages/core/src/initiative-record/index.js';
 
 const TABLES = ['products', 'workspaces', 'resources', 'initiatives', 'initiative_workspace_links', 'requirements', 'acceptance_criteria', 'events', 'idempotency_results'];
@@ -33,13 +34,17 @@ function request() {
 }
 
 describe('initiative_bootstrap transaction', () => {
+  // The failure-injection seam is module state, not per-store state (audit M1-4), so it must be
+  // cleared between tests or an injected step leaks into the next one's success path.
+  afterEach(() => setBootstrapFailureStepForTest(undefined));
+
   it.each(STEPS)('rolls back complete table content and Events when %s creation fails', (step) => {
     const dir = mkdtempSync(join(tmpdir(), 'mma-bootstrap-atomic-'));
     const dbPath = join(dir, 'initiatives.db');
     try {
       const store = InitiativeRecordStore.open({ dbPath });
       const before = tableContent(dbPath);
-      store.setBootstrapFailureStepForTest(step);
+      setBootstrapFailureStepForTest(step);
       expect(() => store.execute(request())).toThrow(/forced bootstrap failure/i);
       expect(tableContent(dbPath)).toEqual(before);
       expect(store.listEvents()).toEqual([]);

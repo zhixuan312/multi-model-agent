@@ -15,101 +15,47 @@ import {
   initiativeOperationRequestSchema,
   initiativeResumeRequestSchema,
   initiativeGateStatusInputSchema,
+  initiativeExportRequestSchema,
   initiativeFieldErrorsFromIssues,
   InitiativeInvalidRequestError,
+  INITIATIVE_EXPORT_SCHEMA_VERSION,
   type DeliveryContract,
+  type InitiativeExportSnapshot,
   type InitiativeRecordEntity,
   type InitiativeResumeResponse,
   type LifecycleResumeBlock,
   type MethodDeclaration,
+  INITIATIVE_OPERATIONS,
+  type InitiativeOperation,
 } from '@zhixuan92/multi-model-agent-core';
 import { expandHome } from '../expand-home.js';
 
-/** Every frozen operation `execute()` accepts EXCEPT `initiative_resume`,
- *  which has its own dedicated method (`initiativeResume`) because it is not
- *  a single store call — it is a server-side assembly of several joined reads. */
-const EXECUTE_OPERATIONS = new Set([
-  'product_create',
-  'product_get',
-  'product_list',
-  'workspace_create',
-  'workspace_get',
-  'workspace_list',
-  'resource_register',
-  'resource_list',
-  'initiative_create',
-  'initiative_get',
-  'initiative_list',
-  'initiative_status',
-  'initiative_link_workspace',
-  'initiative_relate',
-  'initiative_relations',
-  'initiative_task_create',
-  'initiative_task_get',
-  'initiative_task_list',
-  // SPEC-003 Phase B — Task claim/transition operations (FR-8, FR-9).
-  'initiative_task_claim',
-  'initiative_task_release',
-  'initiative_task_complete',
-  'initiative_task_execution',
-  'artifact_register',
-  'artifact_get',
-  // Phase A1 — professional record and verification ledger (SPEC-002 FR-3, FR-4).
-  'requirement_add',
-  'requirement_get',
-  'requirement_list',
-  'acceptance_criterion_add',
-  'acceptance_criterion_get',
-  'acceptance_criterion_list',
-  'decision_record',
-  'decision_supersede',
-  'decision_get',
-  'decision_list',
-  'evidence_add',
-  'evidence_get',
-  'evidence_list',
-  'evidence_link',
-  'evidence_links_list',
-  'risk_add',
-  'risk_status',
-  'risk_get',
-  'risk_list',
-  'verification_record',
-  'verification_get',
-  'verification_list',
-  // SPEC-004 Lifecycle Engine (FR-2 through FR-7): the six phase/focus/contract
-  // mutations. `initiative_gate_status` is excluded — it is the second dedicated
-  // read (Task I-4), served by `initiativeGateStatus()` below, same as
-  // `initiative_resume`.
-  'initiative_phase_enter',
-  'initiative_phase_satisfy',
-  'initiative_phase_reopen',
-  'initiative_phase_skip',
-  'initiative_focus_set',
-  'initiative_set_lifecycle_contract',
-  // SPEC-005 Method Registry (FR-9, FR-10): read-only `method_get`/`method_list` and the
-  // sole Task Method mutation `initiative_task_set_method`.
-  'method_get',
-  'method_list',
-  'initiative_task_set_method',
-  // SPEC-006 Business intake (← AC-1.6) — the confirmed-draft composite mutation. Same
-  // dispatch pattern as every mutation above: one transactional `store.execute()` call.
-  'initiative_bootstrap',
-  // SPEC-007 Delivery Layer — Delivery Contract registry reads and the first Deliverable
-  // operations (Task I-3, ← AC-1.4, AC-1.5, AC-1.6). `deliverable_validate`/`deliverable_deliver`
-  // (Task I-4, ← AC-1.6, AC-1.7, AC-1.8, AC-1.9) complete the shared operation surface;
-  // `deliverable_approve` (Task I-6, ← AC-1.7) extends this set further with the
-  // maintainer-confirmed human-approval mutation.
-  'delivery_contract_get',
-  'delivery_contract_list',
-  'deliverable_define',
-  'deliverable_get',
-  'deliverable_list',
-  'deliverable_attach_artifact',
-  'deliverable_validate',
-  'deliverable_deliver',
-  'deliverable_approve',
+/**
+ * Every frozen operation `execute()` accepts — DERIVED from the operation registry rather than
+ * retyped, so a new operation is executable the moment it is registered.
+ *
+ * This was a hand-maintained `new Set([...])` of 68 string literals, bound to
+ * `INITIATIVE_OPERATIONS` by nothing. Omitting an operation there does not fail to compile; it
+ * makes that operation reject at runtime as "not a valid execute() operation", which reads exactly
+ * like a caller mistake. The list had also drifted from its own doc comment, which claimed a single
+ * exception while three had accumulated.
+ *
+ * The three exclusions are real and each has a dedicated method, because none is a single store
+ * call: `initiative_resume` and `initiative_export` assemble several joined reads, and
+ * `initiative_gate_status` evaluates the lifecycle gates.
+ */
+const DEDICATED_METHOD_OPERATIONS = new Set<InitiativeOperation>([
+  'initiative_resume',
+  'initiative_gate_status',
+  'initiative_export',
 ]);
+
+const EXECUTE_OPERATIONS: ReadonlySet<InitiativeOperation> = new Set(
+  INITIATIVE_OPERATIONS.filter((operation) => !DEDICATED_METHOD_OPERATIONS.has(operation)),
+);
+
+/** Names the dedicated method a caller should have used, for each excluded operation. */
+const DEDICATED_METHOD_HINT = 'call initiativeResume(), initiativeGateStatus(), or initiativeExport() instead';
 
 export class InitiativeRecordRuntime {
   private closed = false;
@@ -134,9 +80,10 @@ export class InitiativeRecordRuntime {
 
   /**
    * Validates `rawRequest` against the frozen operation envelope and
-   * dispatches every operation except the two dedicated reads,
-   * `initiative_resume` (use {@link initiativeResume}) and
-   * `initiative_gate_status` (use {@link initiativeGateStatus}), each of
+   * dispatches every operation except the three dedicated reads —
+   * `initiative_resume` (use {@link initiativeResume}),
+   * `initiative_gate_status` (use {@link initiativeGateStatus}), and
+   * `initiative_export` (use {@link initiativeExport}) — each of
    * which is a server-side assembly of several joined store reads rather
    * than a single store call: mutating operations go through the store's
    * single transactional `execute()`; read operations call the matching
@@ -167,7 +114,7 @@ export class InitiativeRecordRuntime {
       throw new InitiativeInvalidRequestError({
         field_errors: {
           operation: [
-            `${request.operation} is not a valid execute() operation; call initiativeResume() or initiativeGateStatus() instead`,
+            `${request.operation} is not a valid execute() operation; ${DEDICATED_METHOD_HINT}`,
           ],
         },
       });
@@ -230,6 +177,11 @@ export class InitiativeRecordRuntime {
       // algorithm; this runtime does nothing beyond validating the envelope and forwarding
       // the request.
       case 'deliverable_approve':
+      // MMA Next gap-closure (§15, §21 success criterion 12): verification execution,
+      // packaging assembly, and Initiative import. Same pattern as every mutation above.
+      case 'verification_run':
+      case 'deliverable_package':
+      case 'initiative_import':
         return this.store.execute(request);
 
       case 'product_get':
@@ -302,15 +254,25 @@ export class InitiativeRecordRuntime {
       case 'deliverable_list':
         return this.store.listDeliverables(request.input);
 
-      // `initiative_resume` and `initiative_gate_status` are excluded above
-      // by EXECUTE_OPERATIONS; this branch is unreachable but keeps the
-      // switch exhaustive under `request`'s full discriminated-union type.
-      default:
+      // The three dedicated reads, named explicitly rather than swept into `default`.
+      // `EXECUTE_OPERATIONS` already rejects them before the switch, so these arms are
+      // unreachable — but naming them is what lets `default` narrow to `never` below.
+      case 'initiative_resume':
+      case 'initiative_gate_status':
+      case 'initiative_export':
         throw new InitiativeInvalidRequestError({
           field_errors: {
-            operation: ['not a valid execute() operation; call initiativeResume() or initiativeGateStatus() instead'],
+            operation: [`${request.operation} is not a valid execute() operation; ${DEDICATED_METHOD_HINT}`],
           },
         });
+
+      // Now an EXHAUSTIVENESS check, not a catch-all. `EXECUTE_OPERATIONS` is derived from
+      // `INITIATIVE_OPERATIONS`, so a newly registered operation becomes executable immediately —
+      // and would previously have sailed past that gate only to hit a `default` telling the caller
+      // its own registered operation "is not a valid execute() operation". A missing dispatch arm
+      // now fails to COMPILE instead, naming the operation.
+      default:
+        return assertEveryOperationDispatched(request);
     }
   }
 
@@ -364,6 +326,9 @@ export class InitiativeRecordRuntime {
     // live gate evaluator `initiativeGateStatus` below reuses — one shared
     // read helper, not two divergent implementations.
     const lifecycle = this.store.getLifecycleResumeBlock({ uuid: initiative.uuid });
+    // MMA Next gap-closure (§15: "resume returns deliverable validation states"): additive —
+    // `[]`/all-zero for an Initiative with no Deliverables.
+    const deliverables = this.store.listDeliverables({ initiative_id: initiative.uuid });
 
     const response: InitiativeResumeResponse = {
       initiative,
@@ -379,6 +344,7 @@ export class InitiativeRecordRuntime {
       evidence,
       verification,
       lifecycle,
+      deliverables,
       counts: {
         workspaces: workspaces.length,
         resources: resourceCount,
@@ -394,6 +360,7 @@ export class InitiativeRecordRuntime {
         risks_open: this.store.countOpenRisks(initiative.uuid),
         evidence: this.store.countEvidence(initiative.uuid),
         verification_by_state: this.store.countVerificationByState(initiative.uuid),
+        deliverables_by_validation_state: this.store.countDeliverablesByValidationState(initiative.uuid),
       },
     };
     return response;
@@ -417,4 +384,67 @@ export class InitiativeRecordRuntime {
     }
     return this.store.getLifecycleResumeBlock(parsed.data.initiative);
   }
+
+  /**
+   * `initiative_export` (MMA Next gap-closure, §15, §21 success criterion 12): the third
+   * dedicated read, alongside `initiativeResume` and `initiativeGateStatus` above — a
+   * server-side assembly of several joined store reads, never a single store call. Assembles
+   * the complete, self-contained portable `InitiativeExportSnapshot` for one Initiative: throws
+   * `invalid_request` for a malformed lookup before any store call, `not_found` for an unknown
+   * Initiative. Performs no write.
+   */
+  initiativeExport(rawRequest: unknown): InitiativeExportSnapshot {
+    const parsed = initiativeExportRequestSchema.safeParse(rawRequest);
+    if (!parsed.success) {
+      throw new InitiativeInvalidRequestError({ field_errors: initiativeFieldErrorsFromIssues(parsed.error.issues) });
+    }
+    const initiative = this.store.getInitiative(parsed.data.initiative);
+    const product = this.store.getProduct({ uuid: initiative.product_id });
+    const workspaces = this.store.listInitiativeWorkspaceLinksWithDetail({ initiative_id: initiative.uuid });
+    const tasks = this.store.listInitiativeTasks({ initiative_id: initiative.uuid });
+    const artifacts = this.store.listInitiativeArtifacts(initiative.uuid);
+    const requirements = this.store.listRequirements({ initiative_id: initiative.uuid });
+    const acceptanceCriteria = this.store.listAcceptanceCriteria({ initiative_id: initiative.uuid });
+    const decisions = this.store.listDecisions({ initiative_id: initiative.uuid });
+    const evidence = this.store.listEvidence({ initiative_id: initiative.uuid });
+    const risks = this.store.listRisks({ initiative_id: initiative.uuid });
+    const verificationRuns = this.store.listVerificationRuns({ initiative_id: initiative.uuid });
+    const phaseRecords = this.store.listPhaseRecords({ initiative_id: initiative.uuid });
+    const deliverables = this.store.listDeliverables({ initiative_id: initiative.uuid }).map((deliverable) => ({
+      deliverable,
+      members: this.store.listDeliverableMembers({ deliverable_id: deliverable.uuid }),
+      history: this.store.listDeliveryHistory({ deliverable_id: deliverable.uuid }),
+    }));
+    const events = this.store.listEvents({ initiative_id: initiative.uuid });
+
+    const snapshot: InitiativeExportSnapshot = {
+      schema_version: INITIATIVE_EXPORT_SCHEMA_VERSION,
+      exported_at: new Date().toISOString(),
+      initiative,
+      product,
+      workspaces,
+      tasks,
+      artifacts,
+      requirements,
+      acceptance_criteria: acceptanceCriteria,
+      decisions,
+      evidence,
+      risks,
+      verification_runs: verificationRuns,
+      phase_records: phaseRecords,
+      deliverables,
+      events,
+    };
+    return snapshot;
+  }
+}
+
+/** Fails to COMPILE when a registered operation reaches `execute()`'s switch with no dispatch arm.
+ *  Reached at runtime only if the type system was bypassed, so it still throws rather than
+ *  returning something a caller would treat as a result. */
+function assertEveryOperationDispatched(request: never): never {
+  const operation = (request as { operation?: unknown }).operation;
+  throw new InitiativeInvalidRequestError({
+    field_errors: { operation: [`${String(operation)} has no execute() dispatch arm`] },
+  });
 }

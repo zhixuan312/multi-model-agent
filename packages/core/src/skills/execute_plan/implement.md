@@ -36,10 +36,10 @@ Reconciliation means satisfying the contract against actual source, not matching
 
 ## Output
 
-Your FINAL text response must be exactly one JSON block:
+Your FINAL text response must be exactly one JSON block. **`id` (the plan's `I-N`) is required** — it matches your report to the dispatched tasks; a title-only report fails validation and the run reports `contract_unverifiable`. `title` is optional.
 
 ```json
-{"tasks": [{"title": "<task heading>", "status": "done|failed"}], "notes": "<observations, contract defects found>"}
+{"tasks": [{"id": "I-1", "title": "<task heading>", "status": "done|failed"}], "notes": "<observations, contract defects found>"}
 ```
 
 Report `status: "done"` for a task only when its Contract is satisfied and its plan-authored acceptance

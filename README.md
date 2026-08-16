@@ -114,7 +114,7 @@ mma plugin build --target=agent-plugin      # -> ~/.mma/plugin-agent-plugin
 ```
 
 That emits an [Agent Plugins 1.0](https://agent-plugins.org/specification) package — root
-`plugin.json`, the same 16 skills and 3 commands, and an `mcp.json` whose server is the `mma mcp` **stdio bridge**,
+`plugin.json`, the same 16 skills and 4 commands, and an `mcp.json` whose server is the `mma mcp` **stdio bridge**,
 so no token is ever written into the package. Codex, Cursor and VS Code read this format directly;
 Claude Code does not, and keeps its own package (`mma plugin build`, the default target). Both are
 generated from the same skills — the payload never forks.
@@ -183,7 +183,7 @@ Claude Code users can install the skills **and** the MCP server in a single step
 /plugin install mma@multi-model-agent
 ```
 
-That delivers 16 skills (`/mma:audit`, `/mma:delegate`, `/mma:review`, …), 3 commands (`/mma:flow`, `/mma:breakout`, `/mma:tldr`), and the MCP server pointed at your local daemon. The plugin drops the packaged `mma-` prefix because the plugin name already namespaces every component — `/mma:audit`, not `/mma:mma-audit`. The plugin contains **no auth token** — it reads yours at connection time from `$MMA_AUTH_TOKEN`, `$MMA_TOKEN_FILE`, or `~/.mma/auth-token`, and Claude Code re-reads it automatically if the token rotates.
+That delivers 16 skills (`/mma:audit`, `/mma:delegate`, `/mma:review`, …), 4 commands (`/mma:flow`, `/mma:breakout`, `/mma:tldr`, `/mma:deck`), and the MCP server pointed at your local daemon. The plugin drops the packaged `mma-` prefix because the plugin name already namespaces every component — `/mma:audit`, not `/mma:mma-audit`. The plugin contains **no auth token** — it reads yours at connection time from `$MMA_AUTH_TOKEN`, `$MMA_TOKEN_FILE`, or `~/.mma/auth-token`, and Claude Code re-reads it automatically if the token rotates.
 
 > **The plugin supersedes standalone skills automatically.** Standalone (`mma sync-skills`) is the default, but the plugin is a strict superset — skills *plus* the SDLC commands *plus* the MCP server. So once the plugin is installed, `mma sync-skills` retires the standalone Claude Code copies and pins that client off, keeping exactly one install path. Without this you'd have two copies of every skill (`/mma-audit` **and** `/mma:audit`) with near-identical descriptions, and Claude would pick between them arbitrarily.
 >
@@ -497,14 +497,14 @@ Add the `diagnostics` block to `~/.mma/config.json`:
   "agents": { "...": "..." },
   "diagnostics": {
     "log": true,
-    "verbose": true
+    "logDir": "~/.mma/logs"
   }
 }
 ```
 
-Or per-run via `mma serve --verbose --log`. JSONL goes to `~/.mma/logs/mma-<date>.jsonl`; large request bodies (>16 KB UTF-8) spill to `~/.mma/logs/requests/<taskId>.json`.
+Or per-run via `mma serve --log`. JSONL goes to `~/.mma/logs/mma-<date>.jsonl`, or to `diagnostics.logDir` when set.
 
-> **Note:** verbose logs may include prompts, file paths, and other task content — disable for production servers handling sensitive data.
+> **Note:** diagnostic logs may include prompts, file paths, and other task content — disable for production servers handling sensitive data.
 
 ## Operator commands
 
@@ -512,7 +512,7 @@ Or per-run via `mma serve --verbose --log`. JSONL goes to `~/.mma/logs/mma-<date
 mma setup                                    # interactive first run: models + clients + config, then sync-skills
 mma update [--no-install] [--package-manager=npm|pnpm|bun]  # update everything, then name what to restart
 mma doctor [--json] [--offline]              # report every version surface + drift; exits non-zero on problems
-mma [--verbose] [--log]                      # start daemon (serve is the default command)
+mma [--log]                                  # start daemon (serve is the default command)
 mma stop    [--now]                          # stop the daemon and wait for it to exit (--now skips the drain)
 mma restart [--now]                          # stop, start a replacement, wait until it answers /health
 mma info  [--json]                           # cliVersion, bind/port, token fingerprint, daemon identity
@@ -553,7 +553,7 @@ async — a handle comes back immediately, poll for the terminal envelope; cance
 restarts (`~/.mma/state/executions.db`); executions caught mid-flight by a restart come back
 `interrupted` with a retryable error — resubmit, nothing resumes.
 
-The same runtime is also reachable over REST (`POST /task`, `GET /task/:id`, …) for Forge and other
+The same runtime is also reachable over REST (`POST /execution`, `GET /execution/:executionId`, …) for Forge and other
 programmatic callers — see [packages/server/README.md#rest-api](./packages/server/README.md#rest-api).
 It is not part of the agent-facing surface: no packaged skill, command, or plugin instructs an agent to
 construct an HTTP request.
@@ -568,8 +568,8 @@ content. The contract classifies nothing: `kind` is free-form, not drawn from a 
 Separately, every task type optionally carries `method`: a registered **Method** identifier
 (`<name>@<version>`, e.g. `software-change@1`) from the Method Registry, a small catalog of
 procedures (software change, research, solution design, architecture review, workflow design, source
-validation, risk analysis, technical writing, regulatory assessment) each with committed guidance the
-engine injects into both the implementer's and reviewer's prompts. An unregistered identifier is
+validation, risk analysis, technical writing, regulatory assessment, intent to initiative) each with
+committed guidance the engine injects into both the implementer's and reviewer's prompts. An unregistered identifier is
 rejected synchronously (`unknown_method`, HTTP 400) before any execution starts. Omitting `method`
 loads the generic, deliverable-neutral skill. See
 [docs/ARCHITECTURE.md#the-deliverable-contract](./docs/ARCHITECTURE.md#the-deliverable-contract)
@@ -586,12 +586,12 @@ mma mcp install claude-code     # or any other ClientId — see the client table
 ```
 
 Seven tools, no per-type aliases: `mma_run` (the full `type`-discriminated task union — same schema
-the REST endpoint validates, generated from one source), `mma_task_get`, `mma_task_wait`,
-`mma_task_list`, `mma_task_cancel`, `mma_context_block_create`, `mma_context_block_delete`. `mma_run`
+the REST endpoint validates, generated from one source), `mma_execution_get`, `mma_execution_wait`,
+`mma_execution_list`, `mma_execution_cancel`, `mma_context_block_create`, `mma_context_block_delete`. `mma_run`
 returns short task results inline and a handle for long ones; a task submitted over MCP is pollable
 over REST and vice versa — one runtime, two transports.
 
-Every reference to a task names it. The handle is `{ taskId, type, cwd }`, not a bare id, and each poll carries the same identity alongside progress, so `spec`, `review` and `investigate` are distinguishable without a lookup (an `audit` also carries its `subtype`). `mma_task_list` answers "what is running right now?" — the question you cannot ask when you no longer hold a taskId — optionally narrowed to one project.
+Every reference to a task names it. The handle is `{ executionId, type, cwd }`, not a bare id, and each poll carries the same identity alongside progress, so `spec`, `review` and `investigate` are distinguishable without a lookup (an `audit` also carries its `subtype`). `mma_execution_list` answers "what is running right now?" — the question you cannot ask when you no longer hold an executionId — optionally narrowed to one project.
 
 **Claude Desktop** speaks stdio rather than HTTP, so it connects through a bridge instead:
 
@@ -599,7 +599,7 @@ Every reference to a task names it. The handle is `{ taskId, type, cwd }`, not a
 mma mcp install claude-desktop     # writes Claude Desktop's MCP config (MCP only — no skills), then relaunch Desktop
 ```
 
-`mma mcp` forwards stdio JSON-RPC frames to the same `POST /mcp`. It resolves the daemon host **once** at startup, rejects any non-loopback answer, and pins the numeric address, so a DNS rebind between requests cannot send your token off-box. Frames are forwarded concurrently — a long `mma_task_wait` must not block the monitor's own polls.
+`mma mcp` forwards stdio JSON-RPC frames to the same `POST /mcp`. It resolves the daemon host **once** at startup, rejects any non-loopback answer, and pins the numeric address, so a DNS rebind between requests cannot send your token off-box. Frames are forwarded concurrently — a long `mma_execution_wait` must not block the monitor's own polls.
 
 #### Execution monitor (MCP Apps)
 

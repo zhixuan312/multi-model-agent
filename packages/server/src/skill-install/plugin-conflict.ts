@@ -105,14 +105,3 @@ export function pluginSupersedesMessage(pluginKey: string, removed: number): str
   ].join('\n');
 }
 
-/** Warning when `mma enable` would recreate the duplicate the plugin supersedes. */
-export function enableDespitePluginWarning(pluginKey: string): string {
-  return [
-    `warning: the "${pluginKey}" plugin is installed and already provides these skills.`,
-    `         Installing them standalone as well gives you TWO copies of every skill`,
-    `         (/mma-audit AND /mma:audit) with near-identical descriptions, so Claude`,
-    `         picks between them arbitrarily. Uninstall the plugin first if you want`,
-    `         standalone only: claude plugin uninstall ${pluginKey}`,
-    ``,
-  ].join('\n');
-}

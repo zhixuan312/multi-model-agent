@@ -26,7 +26,7 @@ describe('initiatives import-bootstrap', () => {
       const second = await run(['initiatives', 'import-bootstrap', '--stem', 'flow'], nested, root);
       expect(second.exitCode).toBe(0);
       const store = InitiativeRecordStore.open({ dbPath: join(stateDir, 'initiatives.db') });
-      try { const init = store.getInitiative({ human_key: 'MMA-INIT-001' })!; expect(init.title).toBe('Bootstrap title'); expect(store.listArtifacts({ initiative_id: init.uuid })).toHaveLength(2); expect(store.listEvents({ initiative_id: init.uuid }).filter((event) => event.event_type === 'artifact_updated')).toHaveLength(1); } finally { store.close(); }
+      try { const init = store.getInitiative({ human_key: 'MMA-INIT-001' })!; expect(init.title).toBe('Bootstrap title'); expect(store.listInitiativeArtifacts(init.uuid)).toHaveLength(2); expect(store.listEvents({ initiative_id: init.uuid }).filter((event) => event.event_type === 'artifact_updated')).toHaveLength(1); } finally { store.close(); }
     } finally { rmSync(root, { recursive: true, force: true }); }
   });
 
@@ -53,7 +53,7 @@ describe('initiatives import-bootstrap', () => {
     writeFileSync(join(root, '.mma', 'config.json'), JSON.stringify({ server: { stateDir, bind: '127.0.0.1', port: 0, auth: { tokenFile: join(root, 'token') }, limits: { maxBodyBytes: 1, batchTtlMs: 1, projectCap: 1, maxContextBlockBytes: 1, maxContextBlocksPerProject: 1, shutdownDrainMs: 1 }, autoUpdateSkills: false } }));
     const provenance = { actor_type: 'system', actor_id: 's', interface: 'cli', initiated_by: 's', authorized_by: 'h', timestamp: '2026-08-12T00:00:00.000Z', source: 'manual' } as const;
     const seed = InitiativeRecordStore.open({ dbPath: join(stateDir, 'initiatives.db') });
-    const product = seed.execute({ operation: 'product_create', input: { name: 'Other', slug: 'other' }, expected_revision: 0, provenance });
+    const product = seed.execute({ operation: 'product_create', input: { name: 'Other', slug: 'other' }, expected_revision: 0, provenance }) as { uuid: string };
     seed.execute({ operation: 'initiative_create', input: { product_id: product.uuid, title: 'X', goal: 'g', status: 'open', outcome: null }, expected_revision: 0, provenance });
     const eventsBefore = seed.listEvents({}).length; seed.close();
     // Manufacture the unreachable-by-API precondition state with raw SQL (the monotonic

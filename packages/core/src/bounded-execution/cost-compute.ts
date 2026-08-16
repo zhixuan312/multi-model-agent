@@ -1,4 +1,4 @@
-import type { TokenUsage } from '../providers/runner-types.js';
+import type { TokenUsage } from '../types/run-result.js';
 
 export interface RateCard {
   inputCostPerMTok: number;

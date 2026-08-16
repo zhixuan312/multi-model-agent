@@ -29,12 +29,23 @@ describe('agents.<tier>.model — single-model invariant', () => {
     }
   });
 
-  it('rejects an array-shaped model with a clear message', () => {
+  // The pre-v4.0 shape — the one a migrating config actually carries. The old assertion here was
+  // `expect(result.success).toBe(false)` under the name "with a clear message", and it checked no
+  // message: this input ALSO omits `complex` and `main`, so it fails whether or not the model
+  // field is the reason. It passed against Zod's default "expected string, received array".
+  it('rejects an array-shaped model with the same 1:1 explanation as an empty one', () => {
     const result = multiModelConfigSchema.safeParse({
       agents: {
         standard: { type: 'claude', model: ['a', 'b'] },
+        complex: { type: 'claude', model: 'claude-opus-4-7' },
+        main: { type: 'claude', model: 'claude-opus-4-7' },
       },
     });
     expect(result.success).toBe(false);
+    if (!result.success) {
+      const issue = result.error.issues.find((i) => i.path.includes('model'));
+      expect(issue?.path).toEqual(['agents', 'standard', 'model']);
+      expect(issue?.message).toContain('1:1 invariant');
+    }
   });
 });

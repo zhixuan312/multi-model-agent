@@ -2,7 +2,12 @@ import { describe, expect, it } from 'vitest';
 import { mkdtemp, rm, mkdir, writeFile, symlink } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { ACCEPTED_CHECK_ROOTS, assertSafeAcceptanceTestPaths, ContractPlanError } from '@zhixuan92/multi-model-agent-core';
+import {
+  ACCEPTED_CHECK_ROOTS,
+  assertSafeAcceptanceTestPaths,
+  ContractPlanError,
+  type ContractPlanSnapshot,
+} from '@zhixuan92/multi-model-agent-core';
 
 /**
  * A declared check must be confined, but NOT to a JavaScript directory name.
@@ -20,13 +25,26 @@ import { ACCEPTED_CHECK_ROOTS, assertSafeAcceptanceTestPaths, ContractPlanError 
  * never-overwrite rule lives in `materializeAcceptanceTests` and is covered by its own tests.
  */
 
-const snapshot = (path: string) => ({
+// A COMPLETE `ContractPlanSnapshot`, not a partial one cast past the compiler. This fixture used
+// to end `} as never`, which silenced the three required fields it omits (`output`, `dependencies`,
+// `contract`) — so the file compiled while describing a snapshot the parser can never produce, and
+// the typecheck could not notice if the shape moved underneath it.
+const snapshot = (path: string): ContractPlanSnapshot => ({
   tasks: [{
     id: 'I-1',
     title: 'Task I-1: check path',
+    output: 'out/x',
+    dependencies: 'none',
+    contract: {
+      inputsRequest: 'x',
+      outputsResponse: 'y',
+      dataMapping: 'z',
+      errors: 'e',
+      behaviorInvariants: 'b',
+    },
     acceptanceTests: [{ path, source: '// check', command: 'node --test' }],
   }],
-} as never);
+});
 
 describe('accepted check roots', () => {
   it('accepts a check under every documented root', async () => {

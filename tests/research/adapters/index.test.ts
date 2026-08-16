@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { resolveEnabledAdapters } from '../../../packages/core/src/research/adapters/index.js';
+import { resolveEnabledAdapters, CREDENTIAL_GATED_ADAPTERS } from '../../../packages/core/src/research/adapters/index.js';
 
 const baseCfg = {
   arxiv: true, semanticScholar: true, githubSearch: true,
@@ -60,5 +60,23 @@ describe('resolveEnabledAdapters', () => {
     const cfg = { ...baseCfg, pubmed: false };
     const enabled = resolveEnabledAdapters(cfg);
     expect(enabled).not.toContain('pubmed');
+  });
+
+  /**
+   * `CREDENTIAL_GATED_ADAPTERS` and this function state the same fact in two places, and the
+   * orchestrator reads the set to decide whether a skipped adapter reports `no_api_key_configured`
+   * or `adapter_disabled`. If they drift, an operator is told to configure a key for an adapter
+   * they turned off, or told an adapter is disabled when the real problem is a missing key — the
+   * defect the split was made to fix. So derive the truth from the FUNCTION and compare.
+   */
+  it('the credential-gated set names exactly the adapters withheld for a missing credential', () => {
+    const withAllCredentials = resolveEnabledAdapters(baseCfg, {
+      semanticScholarApiKey: 'sk-test',
+      githubPat: 'ghp-test',
+    });
+    const withNoCredentials = resolveEnabledAdapters(baseCfg, {});
+    const withheldWithoutCredentials = withAllCredentials.filter((id) => !withNoCredentials.includes(id));
+
+    expect([...CREDENTIAL_GATED_ADAPTERS].sort()).toEqual(withheldWithoutCredentials.sort());
   });
 });

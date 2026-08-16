@@ -43,7 +43,7 @@ const defaultRunAcceptanceCommand: RunAcceptanceCommand = (command, cwd) =>
     const parts = command.trim().split(/\s+/);
     const cmd = parts[0] ?? '';
     const args = parts.slice(1);
-    execFile(cmd, args, { cwd, timeout: 600_000, maxBuffer: 32 * 1024 * 1024 }, (err, stdout, stderr) => {
+    execFile(cmd, args, { cwd, timeout: 600_000, maxBuffer: 32 * 1024 * 1024, windowsHide: true }, (err, stdout, stderr) => {
       const exitCode = err && typeof (err as { code?: unknown }).code === 'number' ? (err as { code: number }).code : err ? 1 : 0;
       resolve({ exitCode, stdout: String(stdout), stderr: String(stderr) });
     });
@@ -209,6 +209,9 @@ function earlyFailureResult(input: PipelineInput, code: string, message: string)
     turns: 0,
     durationMs: 0,
     terminationReason: 'error',
+    // No session ran, so no sandbox decision was ever evaluated — "not
+    // measured", which is null, not zero.
+    sandboxDenialCount: null,
     errorCode: code,
     errorMessage: message,
     filesWritten: [],
@@ -261,7 +264,15 @@ export async function runTwoPhasePipeline(input: PipelineInput): Promise<Pipelin
   // The baseline is captured BEFORE any worker starts. A git target that cannot yield a HEAD
   // fails here rather than running without diff evidence.
   const effectiveCwd = input.cwd;
-  const baseline = input.writeRoute ? await captureBaseline(input.cwd) : { head: null, branch: null, dirtyAtDispatch: false };
+  // The read-route placeholder carries `statusText` too, so it is a genuine `RepoBaseline`.
+  // Without it the two branches form a UNION, and the code below only compiles because the
+  // `baseline.head === null` guard in `commitWork` happens to narrow the incomplete member away —
+  // reorder that guard and the type error appears at `commitAll`, which reads `statusText` to
+  // decide whether the worker changed anything. A no-op check comparing against `undefined` would
+  // conclude the tree HAD changed and manufacture a commit.
+  const baseline = input.writeRoute
+    ? await captureBaseline(input.cwd)
+    : { head: null, branch: null, dirtyAtDispatch: false, statusText: '' };
   const commitState: { outcome: CommitOutcome | null } = { outcome: null };
   let committed = false;
 

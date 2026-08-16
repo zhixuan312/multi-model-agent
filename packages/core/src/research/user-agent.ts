@@ -14,7 +14,17 @@ function compose(version: unknown): string {
 
 export const USER_AGENT: string = compose((pkg as { version?: unknown }).version);
 
-// Test seam — exported only for unit tests; do not call from production code.
-export async function _resetForTests(fakePkg: { version?: unknown }): Promise<string> {
+/**
+ * Compose a User-Agent from an arbitrary package object — the seam the unit tests use to check
+ * the fallback without a real malformed `package.json`.
+ *
+ * Named `_resetForTests` until this audit, which said it RESETS something. It does not: `compose`
+ * is pure, `USER_AGENT` is computed once at module load and this call cannot change it. A reader
+ * looking for the state it reset would find none, and a test author might reasonably expect a
+ * call here to alter `USER_AGENT` for the rest of the file.
+ *
+ * Not async either — nothing here awaits.
+ */
+export function composeUserAgentForTests(fakePkg: { version?: unknown }): string {
   return compose(fakePkg.version);
 }

@@ -1,23 +1,25 @@
 import { describe, expect, it } from 'vitest';
-import { runTwoPhasePipeline } from '../../packages/core/src/unified/two-phase-pipeline.js';
+import { runTwoPhasePipeline, type PipelineInput } from '../../packages/core/src/unified/two-phase-pipeline.js';
 import { mockProvider } from '../contract/fixtures/mock-providers.js';
 
-function baseInput(overrides: Record<string, unknown>) {
+// `overrides` is a Partial<PipelineInput>, not a loose record. As `Record<string, unknown>` the
+// spread widened the whole literal, which is what forced the `} as never` that used to close it —
+// and that cast then hid every field of the input, including a typo in `forceReview` or
+// `applyDecisions` that would have made these tests assert nothing.
+function baseInput(overrides: Partial<PipelineInput>) {
   let reviewerOpens = 0;
   const implementer = mockProvider({ sequence: [{ output: '[{"learning":"A","decision":{"kind":"merge","targetNodeId":"0001","reason":"covered"}}]' }] });
   const reviewer = mockProvider({ sequence: [{ output: '{"recorded":[],"failed":[]}' }], onOpen: () => { reviewerOpens += 1; } });
-  return {
-    input: {
-      type: 'journal_record', readerFacing: true, reviewPolicy: 'reviewed',
-      implementerSkill: 'impl', reviewerSkill: 'rev',
-      implementerProvider: implementer, reviewerProvider: reviewer,
-      implementerTier: 'complex', reviewerTier: 'standard',
-      taskPayload: '{"records":[{"prompt":"A"}]}', cwd: process.cwd(), sandboxPolicy: 'cwd-only',
-      dispatchedTasks: ['[record 1] A'],
-      ...overrides,
-    } as never,
-    reviewerOpens: () => reviewerOpens,
+  const input: PipelineInput = {
+    type: 'journal_record', readerFacing: true, reviewPolicy: 'reviewed',
+    implementerSkill: 'impl', reviewerSkill: 'rev',
+    implementerProvider: implementer, reviewerProvider: reviewer,
+    implementerTier: 'complex', reviewerTier: 'standard',
+    taskPayload: '{"records":[{"prompt":"A"}]}', cwd: process.cwd(), sandboxPolicy: 'cwd-only',
+    dispatchedTasks: ['[record 1] A'],
+    ...overrides,
   };
+  return { input, reviewerOpens: () => reviewerOpens };
 }
 
 describe('two-phase pipeline journal applyDecisions hook', () => {

@@ -144,8 +144,19 @@ export function isClosingRecord(
     case 'human':
       return record.outcome.status === 'approved';
     default:
-      return false;
+      // An EXHAUSTIVENESS check, not a catch-all `return false`. The three cases above are exactly
+      // `VERIFICATION_METHODS`, so this is unreachable — but a fourth method added to that list
+      // would have fallen here and answered "not closing" forever, silently. That is the precise
+      // failure this module's own header warns about: a finished flow waiting forever for
+      // verification it already has, with nothing anywhere reporting a problem. Failing to compile
+      // names the omission at the only moment anyone can act on it.
+      return assertEveryVerificationMethodHandled(criterion.method);
   }
+}
+
+/** Fails to COMPILE when `VerificationMethod` gains a member with no closure rule above. */
+function assertEveryVerificationMethodHandled(method: never): never {
+  throw new Error(`no acceptance-closure rule defined for verification method '${String(method)}'`);
 }
 
 /** Does every declared criterion have closing evidence against the current output?

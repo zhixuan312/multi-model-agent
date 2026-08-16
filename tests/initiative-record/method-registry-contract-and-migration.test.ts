@@ -39,7 +39,7 @@ describe('Method registry contract and schema v6', () => {
       // v7 tables are additive-only `CREATE TABLE IF NOT EXISTS` / `INSERT OR IGNORE` DDL with
       // no v4/v5/v6 column dependency, so re-applying it here is inert for this check.
       expect(upgraded.prepare('PRAGMA user_version').get()).toMatchObject({ user_version: 8 });
-      expect(upgraded.prepare('PRAGMA table_info(tasks)').all().map((row: { name: string }) => row.name)).toContain('method');
+      expect(upgraded.prepare('PRAGMA table_info(tasks)').all().map((row) => (row as { name: string }).name)).toContain('method');
       expect(upgraded.prepare('SELECT id, is_builtin FROM methods ORDER BY id').all()).toEqual(IDS.slice().sort().map((id) => ({ id, is_builtin: 1 })));
       expect(upgraded.prepare('SELECT method FROM tasks WHERE uuid = ?').get(task.uuid)).toEqual({ method: null });
       upgraded.close();

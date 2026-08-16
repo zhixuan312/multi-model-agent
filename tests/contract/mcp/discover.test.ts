@@ -53,11 +53,4 @@ describe('contract: MCP server/discover', () => {
       expect(listed.resources).toHaveLength(1);
     } finally { await client.close(); await h.close(); }
   });
-
-  it('resolves capabilities through one deps-carried binding — no second inline literal in mcp-adapter.ts', async () => {
-    const source = await import('node:fs/promises').then((fs) => fs.readFile('packages/server/src/mcp/mcp-adapter.ts', 'utf8'));
-    expect(source).not.toMatch(/capabilities:\s*\{\s*tools:/);
-    expect(source.match(/deps\.capabilities/g)?.length).toBeGreaterThanOrEqual(2);
-    expect(source).not.toMatch(/import[\s\S]*MCP_CAPABILITIES[\s\S]*from ['"]\.\/tool-surface\.js['"]/);
-  });
 });

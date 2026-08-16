@@ -6,12 +6,12 @@ describe('TaskEnvelope shape guard (A2)', () => {
   it('keyset matches the spec — no userMessage/assistantText/fileContents fields', () => {
     const allowedKeys = new Set([
       'taskId','batchId','taskIndex','route','agentType','client','mainModel','cwd','startedAt',
-      'status','terminalAt','stopReason','structuredError','errorCode','reviewPolicy','plannedStageTotal',
+      'status','terminalAt','stopReason','structuredError','errorCode','reviewPolicy',
       'stages','toolCalls','filesWritten','realFilesChanged',
       'commitSha','commitMessage','commitSkipReason','contextBlockId',
       'totalCostUSD','totalInputTokens','totalOutputTokens','totalCachedReadTokens','totalCachedNonReadTokens',
-      'totalDurationMs','turnsUsed','stallCount','sandboxViolationCount','taskMaxIdleMs',
-      'findings','sourcesUsed','escalationLog','validationWarnings','headline',
+      'totalDurationMs','turnsUsed','sandboxViolationCount','wasCancelled',
+      'findings','sourcesUsed','validationWarnings',
     ]);
     // Compile-time check: type literal of TaskEnvelope keys must be exactly allowedKeys.
     type Keys = keyof TaskEnvelope;
@@ -19,13 +19,13 @@ describe('TaskEnvelope shape guard (A2)', () => {
       taskId: true, batchId: true, taskIndex: true, route: true, agentType: true,
       client: true, mainModel: true, cwd: true, startedAt: true,
       status: true, terminalAt: true, stopReason: true, structuredError: true,
-      errorCode: true, reviewPolicy: true, plannedStageTotal: true,
+      errorCode: true, reviewPolicy: true,
       stages: true, toolCalls: true, filesWritten: true, realFilesChanged: true,
       commitSha: true, commitMessage: true, commitSkipReason: true, contextBlockId: true,
       totalCostUSD: true, totalInputTokens: true, totalOutputTokens: true,
       totalCachedReadTokens: true, totalCachedNonReadTokens: true,
-      totalDurationMs: true, turnsUsed: true, stallCount: true, sandboxViolationCount: true, taskMaxIdleMs: true,
-      findings: true, sourcesUsed: true, escalationLog: true, validationWarnings: true, headline: true,
+      totalDurationMs: true, turnsUsed: true, sandboxViolationCount: true, wasCancelled: true,
+      findings: true, sourcesUsed: true, validationWarnings: true,
     };
     expect(Object.keys(_typeCheck).sort()).toEqual([...allowedKeys].sort());
   });

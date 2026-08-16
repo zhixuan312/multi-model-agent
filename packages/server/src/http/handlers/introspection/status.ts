@@ -16,6 +16,18 @@ interface StatusHandlerDeps {
   bind: string;
   version: string;
   config?: MultiModelConfig;
+  /**
+   * Where the install manifest is read from. Production omits it, so
+   * `deriveSkillManifestInfo` falls back to the real `~/.mma`.
+   *
+   * `deriveSkillManifestInfo` has always accepted a `homeDir`; this handler never passed one, so
+   * `GET /status` could only ever report whatever happened to be installed for whoever ran it.
+   * Its test admitted as much in a comment — "we can't assert null with certainty if the
+   * developer has the skill installed" — and settled for `sv === null || typeof sv === 'string'`,
+   * which holds for almost any value. The documented behaviour ("null/null when no skills are
+   * installed") had no coverage because it was unreachable, not because it was unimportant.
+   */
+  homeDir?: string;
 }
 
 /**
@@ -36,6 +48,7 @@ export function buildStatusHandler(deps: StatusHandlerDeps): RawHandler {
       bind,
       version,
       config,
+      homeDir,
     } = deps;
 
     const now = Date.now();
@@ -90,7 +103,7 @@ export function buildStatusHandler(deps: StatusHandlerDeps): RawHandler {
     // ── Skill manifest ────────────────────────────────────────────────────────
     // Derived from the real install-manifest.json (single source of truth shared
     // with serve-startup drift detection). Null/null when no skills are installed.
-    const { skillVersion, skillCompatible } = deriveSkillManifestInfo();
+    const { skillVersion, skillCompatible } = deriveSkillManifestInfo(homeDir);
 
     sendJson(res, 200, {
       version,

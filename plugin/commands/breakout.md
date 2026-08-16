@@ -85,8 +85,19 @@ When the user signals that the breakout is complete:
 3. Show that distilled list to the user before any recording occurs.
 4. Let the user review, remove, reorder, edit, or approve items.
 5. After approval, dispatch exactly one `journal_record` task (via the `mma_run` MCP tool; if it
-   is not available in this session, run `mma clients`) with the full confirmed batch and one
-   shared `topic` value.
+   is not available in this session, run `mma clients`) carrying the full confirmed batch as
+   `records[]` — one entry per insight, each repeating the breakout's `topic`:
+
+   ```json
+   { "type": "journal_record",
+     "records": [ { "prompt": "The distilled learning, in the teammate's own words.", "topic": "worker-runtime" } ] }
+   ```
+
+   One entry per approved insight; `topic` is the breakout's topic slug, repeated on each.
+
+   `topic` is per-record; there is no shared top-level `topic` alongside `records`. A body
+   carrying both is rejected as `invalid_request` — the request schema is strict, and the
+   top-level spelling belongs to the single-record legacy shape only.
 6. After the `journal_record` dispatch completes, dismiss the teammate with
    `TaskStop`.
 

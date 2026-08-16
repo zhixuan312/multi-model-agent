@@ -8,6 +8,7 @@ import type { ExecutionRegistry } from '@zhixuan92/multi-model-agent-core';
 import type { Recorder } from '../telemetry/recorder.js';
 import { RouteDispatcher } from '@zhixuan92/multi-model-agent-core';
 import { EnvelopeBus } from '@zhixuan92/multi-model-agent-core/events/envelope-bus';
+import type { TaskEnvelope } from '@zhixuan92/multi-model-agent-core/events/task-envelope';
 import { LogWriter } from '@zhixuan92/multi-model-agent-core/events/log-writer';
 import { TelemetryUploader } from '@zhixuan92/multi-model-agent-core/events/telemetry-uploader';
 import { StderrLogSubscriber } from '@zhixuan92/multi-model-agent-core/events/stderr-log-subscriber';
@@ -195,6 +196,7 @@ export async function startServer(
 
   const projectRegistry = new ProjectRegistry({
     cap: config.server.limits.projectCap,
+    contextBlocksPerProject: config.server.limits.maxContextBlocksPerProject,
     // A project with active tasks must never be evicted to make room at cap.
     isBusy: (cwd) => executionRegistry.countActive(cwd) > 0,
   });
@@ -206,6 +208,7 @@ export async function startServer(
   // Reads the SAME inventory boot recovery (above) resolved every marker
   // against -- an unresolved marker reports 'failed' here, never silently 'ok'.
   const { buildHealthHandler } = await import('./handlers/introspection/health.js');
+  type DriftEntry = Awaited<ReturnType<Parameters<typeof buildHealthHandler>[0]['manifestSync']['driftReport']>>[number];
   let skillManifestSync: SkillManifestSync;
   if (injectedManifestSync) {
     skillManifestSync = injectedManifestSync;
@@ -221,7 +224,34 @@ export async function startServer(
       },
     };
   }
-  router.register('GET', '/health', buildHealthHandler({ manifestSync: skillManifestSync }));
+  // Memoised for a few seconds, wrapping WHICHEVER seam is in use.
+  //
+  // `/health` is unauthenticated and the real seam is synchronous work proportional to
+  // (installed skills x provisioned clients): `inventory()` renders each packaged skill, hashes
+  // it, and walks the installed tree with readdirSync/lstatSync/readFileSync. Measured against the
+  // real ~480 KiB bundle that is ~17ms of event-loop block per request on a fully provisioned
+  // machine, from any local caller with no token — on the endpoint `scripts/full-smoke/
+  // availability.mjs` polls to decide whether the loop is blocked.
+  //
+  // Wrapping here rather than inside the real branch keeps the endpoint's behaviour one thing: an
+  // injected seam is cached identically, so the property is testable without provisioning a
+  // machine, and a future second seam cannot quietly opt out of it.
+  //
+  // Staleness costs nothing: drift changes when someone runs an install, not between two polls,
+  // and the liveness /health exists to prove is demonstrated by answering at all.
+  const DRIFT_TTL_MS = 5_000;
+  const uncachedManifestSync = skillManifestSync;
+  let driftCache: { at: number; report: DriftEntry[] } | null = null;
+  const cachedManifestSync: typeof skillManifestSync = {
+    async driftReport() {
+      const now = Date.now();
+      if (driftCache && now - driftCache.at < DRIFT_TTL_MS) return driftCache.report;
+      const report = await uncachedManifestSync.driftReport();
+      driftCache = { at: now, report };
+      return report;
+    },
+  };
+  router.register('GET', '/health', buildHealthHandler({ manifestSync: cachedManifestSync }));
 
   // Register control handlers
   await registerControlHandlers(router, config, projectRegistry);
@@ -247,7 +277,11 @@ export async function startServer(
       bus.subscribe(new TelemetryUploader({
         recorder: recorderForUnified,
         consent: { decide: () => decideConsent(join(homedir(), '.mma')) },
-        buildOpts: (env: any) => ({
+        // Typed, not `any`. This reads four TaskEnvelope fields; as `any` a rename on any of
+        // them compiled cleanly and shipped `undefined` into every wire record's model
+        // attribution — the telemetry equivalent of a silent data loss, invisible until the
+        // backend charts went blank.
+        buildOpts: (env: TaskEnvelope) => ({
           toolMode: 'full',
           implementerModel: env.stages[0]?.model ?? env.mainModel,
           implementerTier: env.stages[0]?.tier ?? env.agentType,
@@ -262,7 +296,7 @@ export async function startServer(
 
       const { ExecutionRuntime } = await import('../application/execution-runtime.js');
       const runtime = new ExecutionRuntime({ config: multiModelConfig, bus, executionRegistry, projectRegistry, store: executionStore, initiativeLinker, initiativeRuntime });
-      const deps: HandlerDeps = { runtime, executionRegistry, store: executionStore, initiativeRuntime, initiativeLinker };
+      const deps: HandlerDeps = { runtime, executionRegistry, store: executionStore, initiativeRuntime };
       const { buildUnifiedExecutionHandler, buildExecutionPollHandler, buildExecutionCancelHandler } = await import('./handlers/unified-execution.js');
       router.register('POST', '/execution', buildUnifiedExecutionHandler(deps));
       router.register('GET', '/execution/:executionId', buildExecutionPollHandler(deps));

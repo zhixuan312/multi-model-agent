@@ -181,8 +181,6 @@ export interface ArtifactRef {
 // ---------------------------------------------------------------------------
 
 export type DecisionStatus = 'open' | 'decided' | 'superseded';
-/** Create-time `decision_record` status — `decision_supersede` is the only path to `'superseded'`. */
-export type DecisionCreateStatus = Exclude<DecisionStatus, 'superseded'>;
 
 export type EvidenceLinkTargetType =
   | 'requirement'
@@ -213,8 +211,6 @@ export const VERIFICATION_NON_TERMINAL_STATES: readonly VerificationState[] = [
   'blocked',
   'needs_human_review',
 ];
-/** Historical markers — never transition to `'superseded'` (FR-10). */
-export const VERIFICATION_TERMINAL_STATES: readonly VerificationState[] = ['stale', 'not_applicable', 'superseded'];
 /** States eligible for stale-evidence propagation (FR-11). */
 export const VERIFICATION_STALE_ELIGIBLE_STATES: readonly VerificationState[] = ['pass', 'fail'];
 /** Every VerificationRun state, in a stable order — the `verification_by_state` count keys (FR-12). */
@@ -396,11 +392,19 @@ export interface Establishment {
   satisfier: Satisfier;
 }
 
-/** One Initiative's per-phase transition record; identity is `(initiative_id, phase)` (FR-2). */
+/**
+ * One Initiative's per-phase transition record; identity is `(initiative_id, phase)` (FR-2).
+ * `revision` is the owning Initiative's new revision after this mutation (not a revision of the
+ * Phase Record itself, which carries none) — every phase mutation requires `expected_revision`,
+ * so this lets a caller chain the next transition without an intervening `initiative_get`/
+ * `initiative_resume` read, the same way `initiative_focus_set` already returns the full,
+ * freshly-revisioned Initiative.
+ */
 export interface PhaseRecord {
   initiative_id: string;
   phase: Phase;
   state: PhaseRecordState;
+  revision: number;
 }
 
 /** A versioned, immutable Lifecycle Contract (FR-5). `id` matches `^[a-z][a-z0-9-]*@[1-9][0-9]*$`. */
@@ -419,6 +423,9 @@ export interface GateEstablishmentResult {
 /** A phase's live, advisory, never-persisted gate result (FR-8). */
 export interface GateStatus {
   status: 'green' | 'red';
+  /** Every required Establishment with its verdict (FR-8), satisfied and unsatisfied alike. */
+  establishments: GateEstablishmentResult[];
+  /** The unsatisfied subset of `establishments` — what still stands between here and green. */
   missing: GateEstablishmentResult[];
   note?: string;
 }
@@ -505,6 +512,13 @@ export interface DeliveryContract {
 
 /** The closed Deliverable validation-state vocabulary (FR-3, FR-6). */
 export type DeliverableValidationState = 'pending' | 'valid' | 'invalid' | 'human_approved';
+/** Every `DeliverableValidationState`, in a stable order — the `deliverables_by_validation_state` count keys. */
+export const DELIVERABLE_VALIDATION_STATES: readonly DeliverableValidationState[] = [
+  'pending',
+  'valid',
+  'invalid',
+  'human_approved',
+];
 
 /** A target-ready bundle of Artifacts (FR-3). Task I-3 adds the store methods that create and read these rows. */
 export interface Deliverable {
@@ -552,6 +566,39 @@ export interface TargetAdapter {
   }): { valid: boolean; detail: string };
 }
 
+// ---------------------------------------------------------------------------
+// MMA Next gap-closure — verification execution, packaging assembly, and
+// Initiative portability (`.mma/specs/2026-08-12-mma-next-initiative-engine.md`
+// §15 application surface, §21 success criterion 12). All four additions
+// below are additive to the Initiative Record: no existing field, operation,
+// or event mapping is renamed, widened, or removed.
+// ---------------------------------------------------------------------------
+
+/** One `deliverable_package` coverage entry: a Delivery Contract `requires` string, and the
+ *  member Artifacts currently attached under it (empty when the requirement is uncovered). */
+export interface DeliverablePackageCoverage {
+  requirement: string;
+  members: Array<{ artifact_id: string; path_or_uri: string }>;
+}
+
+/**
+ * `deliverable_package` result shape: the root object IS the (revision-bumped) Deliverable —
+ * the same "root IS the entity, plus more" convention `InitiativeBootstrapResult` established —
+ * plus the computed packaging report. Contract-completeness only: this operation never resolves
+ * or calls a `TargetAdapter` and never invents file content; the committed packager guidance
+ * (`loadDeliveryPackager`) supplies the "how to package" prose, and target specifics live
+ * exclusively in adapters (SPEC-007 FR-8's boundary, unchanged by this addition).
+ */
+export interface DeliverablePackageResult extends Deliverable {
+  coverage: DeliverablePackageCoverage[];
+  /** Delivery Contract `requires` entries with zero covering members. */
+  missing: string[];
+  /** `true` only when `missing` is empty. Incomplete membership is reported, not rejected. */
+  complete: boolean;
+  /** The committed packager asset's Markdown text for this Deliverable's `delivery_contract`. */
+  packaging_guidance: string;
+}
+
 /** The public result shape returned by every mutating operation (Task I-3 `execute()`). */
 export type InitiativeRecordEntity =
   | Product
@@ -572,7 +619,8 @@ export type InitiativeRecordEntity =
   | PhaseRecord
   | InitiativeBootstrapResult
   | Deliverable
-  | DeliverableArtifactMember;
+  | DeliverableArtifactMember
+  | DeliverablePackageResult;
 
 /** One `initiative_bootstrap` requested Workspace, paired back to its request `workspace_key`. */
 export interface InitiativeBootstrapWorkspaceResult extends Workspace {
@@ -635,6 +683,14 @@ export interface InitiativeResumeResponse {
   verification: Array<{ acceptance_criterion_id: string; latest: VerificationRun }>;
   /** SPEC-004: additive lifecycle block — focus phase, contract, six phase/gate entries, and recent lifecycle Events. */
   lifecycle: LifecycleResumeBlock;
+  /**
+   * MMA Next gap-closure (§15, "resume returns deliverable validation states"): every
+   * Deliverable defined under the Initiative, each with its target_type, delivery_contract,
+   * validation_state, validation_detail, and delivery_reference — ordered `createdAt` ascending,
+   * then `uuid` ascending (the same order `deliverable_list` uses). Additive: `[]` for an
+   * Initiative with no Deliverables.
+   */
+  deliverables: Deliverable[];
   counts: {
     workspaces: number;
     resources: number;
@@ -651,7 +707,74 @@ export interface InitiativeResumeResponse {
     risks_open: number;
     evidence: number;
     verification_by_state: Record<VerificationState, number>;
+    /** MMA Next gap-closure: Deliverable counts by validation_state — every `DeliverableValidationState` key present, defaulting to `0`, matching how `verification_by_state` already works. */
+    deliverables_by_validation_state: Record<DeliverableValidationState, number>;
   };
+}
+
+/**
+ * `initiative_export`/`initiative_import`'s schema-version stamp (MMA Next §15, §21 success
+ * criterion 12: "an Initiative can be exported to a portable snapshot and re-imported"). Bumped
+ * only when the portable snapshot shape changes; `initiative_import` rejects a snapshot whose
+ * `schema_version` this build does not recognize.
+ */
+export const INITIATIVE_EXPORT_SCHEMA_VERSION = 1;
+
+/** One exported Initiative-Workspace link: the link's own row (role, createdAt, revision) plus the joined Workspace and its Resources. */
+export interface ExportedWorkspaceLink {
+  link: InitiativeWorkspaceLink;
+  workspace: Workspace;
+  resources: Resource[];
+}
+
+/** One exported Phase Record. Only phases with a persisted row are included — an absent phase
+ *  synthesizes to `not_started` on read either way, so a snapshot with no lifecycle activity
+ *  carries `[]` here rather than fabricating six default rows. */
+export interface ExportedPhaseRecord {
+  phase: Phase;
+  state: PhaseRecordState;
+}
+
+/** One exported Deliverable, with its full membership and delivery history. */
+export interface ExportedDeliverableBundle {
+  deliverable: Deliverable;
+  members: DeliverableArtifactMember[];
+  history: DeliveryHistoryEntry[];
+}
+
+/**
+ * `initiative_export`'s complete, self-contained portable snapshot of ONE Initiative (MMA Next
+ * §15, §21 success criterion 12). Additive-only public shape: a future `schema_version` bump
+ * adds fields rather than reshaping these.
+ *
+ * EvidenceLinks are deliberately NOT included — the same choice `InitiativeResumeResponse`
+ * already documents for its own `evidence` section. Methods, Delivery Contracts, and Lifecycle
+ * Contracts are not included either: every Initiative Record store seeds the same immutable
+ * built-in catalogs on open (`migrations.ts`) and there is no caller-visible registration path
+ * for any of the three, so every id an imported record references already resolves in the
+ * target store. InitiativeRelations (to OTHER Initiatives) are out of scope too — a
+ * single-Initiative snapshot cannot portably carry a relation to an Initiative it does not also
+ * contain.
+ */
+export interface InitiativeExportSnapshot {
+  schema_version: number;
+  /** RFC 3339 UTC timestamp of when this snapshot was assembled. */
+  exported_at: string;
+  initiative: Initiative;
+  product: Product;
+  workspaces: ExportedWorkspaceLink[];
+  tasks: Task[];
+  artifacts: ArtifactRef[];
+  requirements: Requirement[];
+  acceptance_criteria: AcceptanceCriterion[];
+  decisions: Decision[];
+  evidence: Evidence[];
+  risks: Risk[];
+  verification_runs: VerificationRun[];
+  phase_records: ExportedPhaseRecord[];
+  deliverables: ExportedDeliverableBundle[];
+  /** Every Event carrying this Initiative's `initiative_id`, ascending by `event_sequence`. */
+  events: Event[];
 }
 
 /** The frozen Phase A0 operation set (FR-3), extended by the Phase A1 operation set (SPEC-002 FR-3, FR-4). */
@@ -736,6 +859,12 @@ export const INITIATIVE_OPERATIONS = [
   'deliverable_validate',
   'deliverable_deliver',
   'deliverable_approve',
+  // MMA Next gap-closure (§15 application surface, §21 success criterion 12): verification
+  // execution, packaging assembly, and Initiative portability. All four are additive.
+  'verification_run',
+  'deliverable_package',
+  'initiative_export',
+  'initiative_import',
 ] as const;
 
 export type InitiativeOperation = (typeof INITIATIVE_OPERATIONS)[number];
@@ -795,6 +924,11 @@ export const INITIATIVE_EVENT_TYPES = {
   // SPEC-007 Delivery Layer (Task I-6, "Interfaces / contracts") — the maintainer-confirmed
   // human-approval mutation.
   deliverable_approve: 'deliverable_approved',
+  // MMA Next gap-closure (§15). `initiative_export` is a read — it has no event-type mapping.
+  // `initiative_import` writes many replayed Events (one per snapshot Event, faithfully
+  // reconstructed) rather than one event of its own — no single mapping entry applies.
+  verification_run: 'verification_run_executed',
+  deliverable_package: 'deliverable_packaged',
 } as const;
 
 /**
@@ -850,4 +984,9 @@ export const INITIATIVE_EVENT_PAYLOAD_KEYS = {
   deliverable_delivered: ['uuid', 'delivery_reference', 'validation_state'],
   // SPEC-007 Delivery Layer (Task I-6, "Interfaces / contracts", maintainer-confirmed shape).
   deliverable_approved: ['uuid', 'previous_validation_state', 'new_validation_state', 'reason'],
+  // MMA Next gap-closure (§15). `verification_run_executed` mirrors `verification_recorded`'s
+  // key set — it persists a VerificationRun the same way, just command-executed instead of
+  // caller-asserted.
+  verification_run_executed: ['uuid', 'initiative_id', 'acceptance_criterion_id', 'method', 'state'],
+  deliverable_packaged: ['uuid', 'delivery_contract', 'complete', 'missing'],
 } as const;

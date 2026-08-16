@@ -27,10 +27,16 @@ describe('server config', () => {
   });
 
   it('MMA_AUTH_TOKEN env override wins over file', () => {
+    // try/finally, like the sibling case in load-strict-token.test.ts. A bare `delete` after the
+    // assertion never runs when the assertion throws, and the leaked token then decides the auth
+    // outcome of every later test in this worker — the same env bleed that makes the suite need
+    // `env -u MMAGENT_AUTH_TOKEN -u MMA_AUTH_TOKEN` to run clean.
     process.env['MMA_AUTH_TOKEN'] = 'from-env';
-    const token = loadAuthToken({ tokenFile: '/nonexistent' });
-    expect(token).toBe('from-env');
-    delete process.env['MMA_AUTH_TOKEN'];
+    try {
+      expect(loadAuthToken({ tokenFile: '/nonexistent' })).toBe('from-env');
+    } finally {
+      delete process.env['MMA_AUTH_TOKEN'];
+    }
   });
 
   it('server.autoUpdateSkills defaults to true', () => {

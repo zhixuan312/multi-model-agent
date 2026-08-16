@@ -7,7 +7,7 @@ function baseOpts() {
     toolMode: 'full' as const,
     implementerModel: 'claude-haiku-4-5',
     implementerTier: 'standard' as const,
-    mainModelFamily: 'claude',
+    mainModelFamily: 'claude' as const,
   };
 }
 
@@ -62,12 +62,12 @@ function envelopeWithReviewStage(route: string, reviewPolicy: 'reviewed' | 'none
   store.startStage('implementing', { model: 'm', tier: 'complex', round: 1 });
   store.completeStage('implementing', 1, {
     outcome: 'advance', durationMs: 100, costUSD: 0.01, inputTokens: 100, outputTokens: 50,
-    cachedReadTokens: 0, cachedNonReadTokens: 0, turnsUsed: 1, toolCallCount: 0, filesReadCount: 0, filesWrittenCount: 1,
+    cachedReadTokens: 0, cachedNonReadTokens: 0, turnsUsed: 1, filesWrittenCount: 1,
   });
   store.startStage('reviewing', { model: 'm', tier: 'complex', round: 1 });
   store.completeStage('reviewing', 1, {
     outcome: 'advance', durationMs: 50, costUSD: 0.005, verdict: 'approved', inputTokens: 50, outputTokens: 25,
-    cachedReadTokens: 0, cachedNonReadTokens: 0, turnsUsed: 1, toolCallCount: 0, filesReadCount: 0, filesWrittenCount: 0,
+    cachedReadTokens: 0, cachedNonReadTokens: 0, turnsUsed: 1, filesWrittenCount: 0,
   });
   store.seal({ status: 'done', stopReason: 'normal', realFilesChanged: [] });
   return store.snapshot();

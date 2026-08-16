@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
 import { headlineForEvent, attachHeadlineProducer } from '../../../packages/server/src/application/headline-from-events.js';
-import { EnvelopeBus } from '../../../packages/core/src/events/envelope-bus.js';
+import { EnvelopeBus } from '@zhixuan92/multi-model-agent-core/events/envelope-bus';
 
 /**
  * `runningHeadline` shipped readable on both wires in Flow 1 and was written by NOTHING —
@@ -129,13 +129,42 @@ describe('running headline: bus wiring', () => {
     const s = sink();
     attachHeadlineProducer(bus, s);
     bus.emitPlainEntry({ ts: '2026-01-01T00:00:00.000Z', kind: 'provider_event', fields: { event: 'claude_tool_call', tool: 'Read' } });
-    bus.emitPlainEntry({ ts: '2026-01-01T00:00:00.000Z', kind: 'server_started', fields: { taskId: 't' } });
+    bus.emitPlainEntry({ ts: '2026-01-01T00:00:00.000Z', kind: 'batch_completed', fields: { taskId: 't' } });
     expect(s.calls).toEqual([]);
+    // Neither is attributable to a task, so neither counts as activity either.
+    expect(s.activity).toEqual([]);
+  });
+
+  /**
+   * Activity is recorded for EVERY attributable provider event, headline or not.
+   *
+   * The sink captured `activity` and nothing asserted it — in a file whose whole subject is a
+   * field that shipped readable and written by nothing. The strip in the execution panel is
+   * drawn from this series, so moving `recordActivity` inside the `if (headline)` would leave a
+   * busy run looking idle whenever its events happen to be unprintable ones, with the panel
+   * showing a flat baseline and no test failing.
+   */
+  it('counts an event with no printable headline as activity all the same', () => {
+    const bus = new EnvelopeBus();
+    const s = sink();
+    attachHeadlineProducer(bus, s);
+    // `codex_turn_started` is in the "says nothing worth showing" set above — no headline.
+    bus.emitPlainEntry({
+      ts: '2026-01-01T00:00:00.000Z', kind: 'provider_event',
+      fields: { event: 'codex_turn_started', taskId: 'busy-task' },
+    });
+    bus.emitPlainEntry({
+      ts: '2026-01-01T00:00:00.000Z', kind: 'provider_event',
+      fields: { event: 'claude_tool_call', tool: 'Grep', input: 'abort', taskId: 'busy-task' },
+    });
+
+    expect(s.calls, 'only the printable one produces a headline').toEqual([['busy-task', 'Grep: abort']]);
+    expect(s.activity, 'but both count as the task doing something').toEqual(['busy-task', 'busy-task']);
   });
 
   it('never lets a headline failure break the bus', () => {
     const bus = new EnvelopeBus();
-    const exploding = { setHeadline: () => { throw new Error('boom'); } };
+    const exploding = { setHeadline: () => { throw new Error('boom'); }, recordActivity: () => { /* no-op */ } };
     attachHeadlineProducer(bus, exploding);
     const other = { name: 'other', receive: vi.fn() };
     bus.subscribe(other);

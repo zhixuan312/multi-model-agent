@@ -81,7 +81,9 @@ dir, outside any repo, for throwaway dispatch scaffolds.
 ### B2 — Plan
 - Trigger : mma-plan  (worker) — one dispatch PER involved repo (fan-out; N=1 single repo)
 - Read    : mma-plan/SKILL.md
-- Wire    : spec → target.paths[0] ; per dispatch: the one repo's scope + constraints → prompt
+- Wire    : spec → target.paths[0] ; per dispatch: the one repo's scope + constraints → prompt ;
+            multi-repo ONLY: `outputPath` = `.mma/plans/<stem>--<repo-slug>.md` (Common: Artifact
+            stem — without it every repo's dispatch derives the same `<stem>.md` and overwrites)
 - Out     : one plan per repo — `.mma/plans/<stem>--<repo-slug>.md` under the parent (single repo: `<stem>.md`)
 - Uses    : Common: Artifact stem · Common: Multi-repo  (one spec → one plan per repo)
 
@@ -159,9 +161,11 @@ stage runs, never after.
   for what gates `done`)
 
 ### B10 — Journal + close
-- Trigger : mma-journal-record  (worker), per insight
+- Trigger : mma-journal-record  (worker) — ONE dispatch for the whole flow's insights
 - Read    : mma-journal-record/SKILL.md   ← the what/how to capture lives THERE
-- Wire    : one learning → prompt
+- Wire    : every learning → `records[]` (one entry each, up to 20 per dispatch). Not one
+            dispatch per insight, and not the top-level `prompt` — that single-record spelling
+            is the legacy shape mma-journal-record normalizes for older callers
 - Out     : journal nodes; then a terminal report of `done` (only once acceptance-closed — Common:
             Acceptance closure) plus the surfaced backlog
 - Uses    : Common: Never-halt
@@ -299,7 +303,9 @@ within threshold does.
 - Round doesn't clear the gate → fix inline (Common: Fixes inline), then run the next round.
 - Round 3 is the last pass: apply its fixes, then advance unconditionally. Round 4 never
   runs. Residual after round 3 (critical or high) → backlog, advance anyway.
-- Never returns `proceed: false` — the flow never stops here.
+- The gate never stops the flow. There is no stop signal to look for and none to emit: the
+  gate is a rule the main agent applies to a round's own findings, not a value any dispatch
+  returns.
 
 ## Common: Never-halt
 
@@ -623,12 +629,20 @@ One flow, one join key — the **stem** `<date>-<slug>`. `ls .mma/*/<stem>.*` an
   today's date; its SKILL.md owns the slug rule — mma-flow never restates or re-derives
   it. The exploration filename IS the stem, and the date is frozen here — a multi-day
   flow stays on one key.
-- **Inherited by the workers, automatically — the flow threads no `outputPath`.** Each
-  stage hands the prior dated artifact to the next as a `target.paths` source, so
+- **Inherited by the workers, automatically — no `outputPath` needed, with ONE exception.**
+  Each stage hands the prior dated artifact to the next as a `target.paths` source, so
   mma-spec and mma-plan reuse its stem verbatim server-side (see their SKILL.md
   `outputPath` rows). Undated scaffolds (the scratchpad `decisions.md`) are skipped, so
   only the exploration/spec dictates the stem. This is the SAME mechanism a direct
   skill call gets — the chain holds with or without the flow.
+- **The exception: B2's multi-repo fan-out MUST thread `outputPath` per repo.** Inheritance
+  derives `.mma/plans/<stem>.md` from the spec — one filename, and every repo's dispatch
+  derives the SAME one. Two repos dispatched without `outputPath` both write it, and the
+  second silently overwrites the first: no error, no warning, one plan on disk where two
+  were commissioned. Nothing server-side appends the repo slug, so B2 passes it explicitly —
+  `outputPath: .mma/plans/<stem>--<repo-slug>.md` — which is also what mma-plan documents
+  ("two repo dispatches differ only in repo scope and `outputPath`"). Single-repo mode has
+  one dispatch, no collision, and threads nothing.
 - **Read off disk for the artifacts no worker writes.** The main agent takes the
   stem from the most-recent exploration filename (once a spec exists, the spec filename
   is equally authoritative) to name the backlog `.mma/backlogs/<stem>.json`, the flow state

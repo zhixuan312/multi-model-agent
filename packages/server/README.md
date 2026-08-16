@@ -199,15 +199,15 @@ Generated on first `mma serve`. Retrieve with `mma print-token`, or set `MMA_AUT
 
 The daemon's agent-facing surface is MCP (below) — no packaged skill, command, or plugin instructs
 an agent to build an HTTP request. REST is fully supported behind the same runtime, for **Forge and
-other programmatic callers**: all task types dispatch through the unified `POST /task` endpoint with
+other programmatic callers**: all task types dispatch through the unified `POST /execution` endpoint with
 a `type` discriminator.
 
 | Endpoint | Purpose |
 |---|---|
-| `POST /task?cwd=<abs>` | Submit a task (delegate, audit, review, debug, execute_plan, investigate, research, journal_record, journal_recall, orchestrate, spec, plan) |
-| `GET /task/:taskId` | Poll task status and results (terminal results survive daemon restarts) |
-| `DELETE /task/:taskId` | Request cooperative cancellation — 202 requested; terminal `cancelled` unless completion won the race; idempotent |
-| `POST /mcp` | MCP endpoint (streamable HTTP, stateless) — tools `mma_run` / `mma_task_get` / `mma_task_wait` / `mma_task_list` / `mma_task_cancel` / `mma_context_block_create` / `mma_context_block_delete` over the same runtime, plus the `ui://mma/execution.html` App resource when its bundle is present |
+| `POST /execution?cwd=<abs>` | Submit a task (delegate, audit, review, debug, execute_plan, investigate, research, journal_record, journal_recall, orchestrate, spec, plan) |
+| `GET /execution/:executionId` | Poll task status and results (terminal results survive daemon restarts) |
+| `DELETE /execution/:executionId` | Request cooperative cancellation — 202 requested; terminal `cancelled` unless completion won the race; idempotent |
+| `POST /mcp` | MCP endpoint (streamable HTTP, stateless) — tools `mma_run` / `mma_execution_get` / `mma_execution_wait` / `mma_execution_list` / `mma_execution_cancel` / `mma_context_block_create` / `mma_context_block_delete` over the same runtime, plus the `ui://mma/execution.html` App resource when its bundle is present |
 | `POST /configure-provider` | Validate and optionally hot-swap a provider/model/auth for a tier |
 | `POST /context-blocks?cwd=<abs>` | Register a reusable context block |
 | `DELETE /context-blocks/:id?cwd=<abs>` | Delete a context block |

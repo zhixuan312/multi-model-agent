@@ -46,7 +46,14 @@ export function shouldRejectNonLoopback(remoteAddress: string | undefined): bool
   return !isLoopbackAddress(remoteAddress);
 }
 
-const ALLOWED_HOST_LITERALS = new Set(['localhost', '127.0.0.1', '[::1]', '::1']);
+/**
+ * The four forms a client can actually present. A bare `::1` is deliberately NOT here: an IPv6
+ * literal in a Host header must be bracketed (RFC 3986 §3.2.2), and the port-stripping below would
+ * see its leading colon at index 0 and reduce it to the empty string anyway — so the entry that
+ * used to sit here could never match any input. An allowlist that lists something it cannot accept
+ * invites the wrong conclusion about what this control admits.
+ */
+const ALLOWED_HOST_LITERALS = new Set(['localhost', '127.0.0.1', '[::1]']);
 
 /**
  * Validates the Host (or Origin) header against a small allowlist.
@@ -59,6 +66,16 @@ export function isAllowedHostHeader(host: string | undefined): boolean {
   if (h.startsWith('[')) {
     const end = h.indexOf(']');
     if (end < 0) return false;
+    // Whatever follows the bracket must be nothing or a numeric port, and nothing else.
+    //
+    // This used to `slice(0, end + 1)` and discard the remainder unchecked, so `[::1]evil.com` and
+    // `[::1]@evil.com` were ACCEPTED — a fail-open branch inside a fail-closed function, while the
+    // unbracketed branch below was strict about exactly this. Not browser-reachable (a browser
+    // derives Host from the URL it is fetching, so it cannot be talked into that spelling), which
+    // is why it is not a rebinding hole — but an allowlist that accepts a host it was never meant
+    // to admit is the wrong thing to leave in place on the strength of who cannot reach it.
+    const rest = h.slice(end + 1);
+    if (rest !== '' && !/^:\d+$/.test(rest)) return false;
     h = h.slice(0, end + 1);
   } else {
     const colon = h.indexOf(':');

@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { loadConfigFromFile } from '@zhixuan92/multi-model-agent-core/config/load';
 import fs from 'fs';
 import path from 'path';
@@ -60,8 +60,22 @@ describe('loadConfigFromFile', () => {
 
     const config = await loadConfigFromFile(configPath);
 
-    expect(config.agents.standard.type).toBe('codex');
-    expect(config.agents.standard.model).toBe('deepseek-r1');
+    expect(config.agents!.standard!.type).toBe('codex');
+    expect(config.agents!.standard!.model).toBe('deepseek-r1');
+  });
+
+  /**
+   * The two read failures are different facts and must read differently.
+   *
+   * Every `fs.readFile` error used to become `Config file not found`, so a config that exists but
+   * cannot be read — wrong owner after a sudo install, a directory where a file was expected —
+   * sent the operator looking for a missing file that was sitting right there. Only ENOENT is
+   * "not found".
+   */
+  it('names an unreadable config as unreadable, not as missing', async () => {
+    // A directory reads as EISDIR: the path exists, and nothing about it is "not found".
+    await expect(loadConfigFromFile(tmpDir)).rejects.toThrow(/could not be read \(EISDIR\)/);
+    await expect(loadConfigFromFile(tmpDir)).rejects.not.toThrow(/not found/);
   });
 
   it('throws when explicit config path does not exist', async () => {
@@ -81,7 +95,7 @@ describe('loadConfigFromFile', () => {
     }));
 
     const config = await loadConfigFromFile(configPath);
-    expect(config.agents.standard.effort).toBe('high');
+    expect(config.agents!.standard!.effort).toBe('high');
   });
 
   it('collectInlineApiKeyOffenders surfaces agents with inline apiKey', async () => {
@@ -117,14 +131,21 @@ describe('loadConfigFromFile', () => {
       },
     }));
 
-    let warned = false;
-    const originalWarn = console.warn;
-    console.warn = () => { warned = true; };
+    // process.stderr.write, not console.warn. The inline-apiKey warning lives in
+    // `cli/serve.ts` and goes out through its `stderr(...)` helper — nothing in this codebase
+    // warns via console.warn. Intercepting console.warn therefore watched a channel no warning
+    // could ever arrive on: `warned` was false whether or not loadConfigFromFile warned, and
+    // moving the warning INTO the loader (the regression this guards) left the test green.
+    const written: string[] = [];
+    const spy = vi.spyOn(process.stderr, 'write').mockImplementation((chunk) => {
+      written.push(String(chunk));
+      return true;
+    });
     try {
       await loadConfigFromFile(configPath);
     } finally {
-      console.warn = originalWarn;
+      spy.mockRestore();
     }
-    expect(warned).toBe(false);
+    expect(written.join('')).toBe('');
   });
 });

@@ -23,11 +23,13 @@ import { resolveRateCard, priceTokens } from '../bounded-execution/cost-compute.
 import { mapProviderEventToPlainEntry } from '../events/plain-log-entry.js';
 import { writeClaudePluginWrapper, buildClaudeSkillOptions } from './claude-skill-plugin.js';
 import { buildConfinementHook } from './claude-cwd-confinement.js';
-import { type BusLike, busOf } from './session-helpers.js';
+import { type BusLike, busOf, wallClockDelayMs } from './session-helpers.js';
 
 export class ClaudeSession implements Session {
   private closed = false;
   private turns = 0;
+  /** Tool calls the confinement hook refused since the last turn was normalized. */
+  private sandboxDenials = 0;
   private sessionId?: string;
   private skillPluginReady = false;
   private readonly bus: BusLike | undefined;
@@ -118,8 +120,16 @@ export class ClaudeSession implements Session {
         }],
       }];
     }
-    if (this.args.opts.sandboxPolicy && this.args.opts.cwd) {
-      Object.assign(hookMap, buildConfinementHook(this.args.opts.sandboxPolicy, this.args.opts.cwd));
+    if (this.args.opts.sandboxPolicy) {
+      // No `&& cwd` guard: a `read-only` policy needs no cwd, and requiring one meant a
+      // read-only session without a cwd installed no hook at all. `buildConfinementHook`
+      // falls back to the read-only evaluator when a `cwd-only` policy arrives with no cwd,
+      // which is the restrictive answer rather than the absent one.
+      Object.assign(hookMap, buildConfinementHook(
+        this.args.opts.sandboxPolicy,
+        this.args.opts.cwd,
+        () => { this.sandboxDenials += 1; },
+      ));
     }
     const goalHooks: Record<string, unknown> = Object.keys(hookMap).length ? { hooks: hookMap } : {};
 
@@ -192,12 +202,12 @@ export class ClaudeSession implements Session {
     // nothing fires — so claude turns had no wall-clock limit at all.
     let timedOut = false;
     let deadlineTimer: NodeJS.Timeout | undefined;
-    const deadlineMs = Math.max(0, this.args.opts.wallClockDeadline - Date.now());
-    if (Number.isFinite(deadlineMs) && deadlineMs > 0) {
+    const deadlineDelayMs = wallClockDelayMs(this.args.opts.wallClockDeadline);
+    if (deadlineDelayMs !== null) {
       deadlineTimer = setTimeout(() => {
         timedOut = true;
         try { q.close(); } catch { /* ignore */ }
-      }, deadlineMs);
+      }, deadlineDelayMs);
       deadlineTimer.unref();
     }
 
@@ -262,9 +272,13 @@ export class ClaudeSession implements Session {
     // incidental). Either way the guard reason wins over the SDK's own
     // termination — a force-closed stream must never report `ok`.
     const guardReason = aborted ? 'aborted' as const : timedOut ? 'time_exceeded' as const : undefined;
+    // Per TURN, not per session: the counter is read and reset here so a
+    // multi-turn session attributes each denial to the turn that caused it
+    // rather than reporting a running total on every one.
+    const sandboxDenials = this.sandboxDenials;
+    this.sandboxDenials = 0;
     const norm = normalizeClaudeTurn(events, {
       durationMs: Date.now() - startMs,
-      costUSD: 0,
       ...(guardReason ? { guardTerminationReason: guardReason } : {}),
     });
     if (!norm.errorCode) {
@@ -272,13 +286,16 @@ export class ClaudeSession implements Session {
       else if (timedOut) norm.errorCode = 'wall_clock_exceeded';
     }
     norm.costUSD = rateCard ? priceTokens(norm.usage, rateCard) : 0;
+    norm.sandboxDenialCount = sandboxDenials;
 
     this.bus?.emitPlainEntry(mapProviderEventToPlainEntry('claude', 'claude_turn_completed', {
       turn: turnIndex,
       inputTokens: norm.usage.inputTokens,
       outputTokens: norm.usage.outputTokens,
-      cachedReadTokens: norm.usage.cachedReadTokens ?? 0,
-      cachedNonReadTokens: norm.usage.cachedNonReadTokens ?? 0,
+      // No `?? 0`: all four TokenUsage fields are required numbers, and the normalizer
+      // initialises every one of them before it returns.
+      cachedReadTokens: norm.usage.cachedReadTokens,
+      cachedNonReadTokens: norm.usage.cachedNonReadTokens,
       terminationReason: norm.terminationReason,
       filesWritten: norm.filesWritten.length,
       ...(norm.errorCode && { errorCode: norm.errorCode }),

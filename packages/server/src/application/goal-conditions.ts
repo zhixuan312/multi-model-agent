@@ -1,4 +1,25 @@
 import type { TaskType } from '@zhixuan92/multi-model-agent-core';
+import { REFINER_SCHEMAS } from '@zhixuan92/multi-model-agent-core';
+
+/**
+ * Types whose refiner answer actually carries a `findings` array, read from the schemas rather
+ * than listed here.
+ *
+ * The reviewer goal is emitted for EVERY type and demanded "you have checked for hallucinated
+ * findings", "every finding cites actual file:line" and "you have checked weight calibration" —
+ * on `delegate` (`{status, notes}`), `execute_plan` (`{tasks, notes}`) and `journal_record`
+ * (`{recorded, failed}`), none of which has a finding or a weight. The Stop hook holds the worker
+ * until the goal reads as satisfied, so those reviewers were spending turns auditing a field that
+ * does not exist in their output.
+ */
+const FINDINGS_TYPES: ReadonlySet<string> = new Set(
+  Object.entries(REFINER_SCHEMAS)
+    .filter(([, schema]) => {
+      const shape = (schema as { shape?: Record<string, unknown> } | undefined)?.shape;
+      return shape !== undefined && 'findings' in shape;
+    })
+    .map(([type]) => type),
+);
 
 /**
  * Build a goal condition string for the Stop hook. This keeps the agent
@@ -8,9 +29,13 @@ export function buildGoalCondition(type: TaskType, role: 'implementer' | 'review
   if (role === 'reviewer') {
     return [
       'You have verified every criterion the implementer was supposed to cover.',
-      'You have checked for hallucinated findings (claims without evidence in the source material).',
-      'You have validated evidence quality (every finding cites actual file:line or quoted text).',
-      'You have checked weight calibration against the skill definitions.',
+      ...(FINDINGS_TYPES.has(type)
+        ? [
+            'You have checked for hallucinated findings (claims without evidence in the source material).',
+            'You have validated evidence quality (every finding cites actual file:line or quoted text).',
+            'You have checked weight calibration against the skill definitions.',
+          ]
+        : []),
       'You have verified the implementer\'s draft and output the refined answer in the same JSON format as the implementer.',
       'No findings, verdict, or meta-commentary -- only the final answer in a ```json fenced block.',
     ].join(' ');
@@ -22,9 +47,14 @@ export function buildGoalCondition(type: TaskType, role: 'implementer' | 'review
       const count = countMatch ? countMatch[1] : 'all';
       return [
         `You have evaluated the document against ALL ${count} criteria one by one.`,
-        'For each criterion, you wrote findings to the scratch file before moving to the next.',
+        // NOT a scratch file: `audit` is registered `read-only`, so the confinement hook denies
+        // every write tool. This goal is enforced by the Stop hook, which re-blocks the worker
+        // until it holds — so naming a file the sandbox forbids held the worker against a
+        // condition it could not satisfy. The audit prompts were corrected to say "working
+        // memory"; this is the same instruction one layer up.
+        'For each criterion, you recorded findings in working memory before moving to the next.',
         'Every criterion either has findings with quoted evidence, or an explicit "No findings for this criterion." entry.',
-        'You have read the scratch file and consolidated into the final JSON output block.',
+        'You have consolidated those findings into the final JSON output block.',
         `The criteriaCovered array in your output lists all ${count} criteria.`,
       ].join(' ');
     }
@@ -38,7 +68,7 @@ export function buildGoalCondition(type: TaskType, role: 'implementer' | 'review
       ].join(' ');
     case 'review':
       return [
-        'You have swept ALL 10 review categories: test gap, cross-file ripple, pre-existing-vs-regression, missing edge case, race/concurrency, resource leak, backward-compat break, security regression, performance regression, implicit-contract assumption.',
+        'You have swept ALL 10 review categories: verification-gap, cross-reference-ripple, pre-existing-vs-regression, missing-edge-case, ordering-concurrency, resource-cleanup-gap, backward-compat-break, safety-regression, efficiency-regression, implicit-contract.',
         'Cross-file findings cite both the change site AND the broken caller.',
         'Pre-existing bugs are separated from new regressions.',
         'You have produced the required JSON output block.',
@@ -116,6 +146,16 @@ export function buildGoalCondition(type: TaskType, role: 'implementer' | 'review
         'Your response is the deliverable — no meta-commentary wrapping it.',
       ].join(' ');
     default:
-      return 'You have completed the task as specified in the skill instructions and produced the required output.';
+      // Unreachable today: the twelve cases above are exactly `TASK_TYPES`. Kept as an
+      // EXHAUSTIVENESS check rather than a generic fallback string — a thirteenth task type
+      // should fail to compile here, naming the omission, instead of silently shipping with a
+      // goal condition that says nothing about what it must cover. A catch-all sentence would
+      // let a new route's Stop hook pass on the first plausible-looking output.
+      return assertEveryTaskTypeHandled(type);
   }
+}
+
+/** Fails to COMPILE when a `TaskType` gains a member with no goal condition above. */
+function assertEveryTaskTypeHandled(type: never): never {
+  throw new Error(`no goal condition defined for task type '${String(type)}'`);
 }

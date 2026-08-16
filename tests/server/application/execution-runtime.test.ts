@@ -7,14 +7,15 @@ import { mkdtempSync, rmSync, readFileSync, writeFileSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { vi } from 'vitest';
 import { ExecutionRuntime } from '../../../packages/server/src/application/execution-runtime.js';
 import { ExecutionStore } from '../../../packages/server/src/application/execution-store.js';
 import { InitiativeRecordRuntime } from '../../../packages/server/src/application/initiative-record-runtime.js';
 import { ProjectRegistry } from '../../../packages/server/src/application/project-registry.js';
 import { SKILLS_DIR } from '../../../packages/server/src/application/skills-dir.js';
-import { ExecutionRegistry } from '../../../packages/core/src/unified/task-registry.js';
-import { EnvelopeBus } from '../../../packages/core/src/events/envelope-bus.js';
-import type { MultiModelConfig, ResolvedAgent, AgentType } from '@zhixuan92/multi-model-agent-core';
+import { ExecutionRegistry, assertRunnable, parseConfig } from '@zhixuan92/multi-model-agent-core';
+import { EnvelopeBus } from '@zhixuan92/multi-model-agent-core/events/envelope-bus';
+import type { RunnableConfig, ResolvedAgent, AgentType } from '@zhixuan92/multi-model-agent-core';
 import type { Provider, SessionOpts, Session, TurnResult } from '../../../packages/core/src/types/run-result.js';
 
 /** Provenance for direct `InitiativeRecordRuntime.execute()` calls in the SPEC-003 B6 defect 3
@@ -30,8 +31,8 @@ const provenance = {
   source: 'test',
 };
 
-function baseAgentsConfig(stateDir: string): MultiModelConfig {
-  return {
+function baseAgentsConfig(stateDir: string): RunnableConfig {
+  const config = parseConfig({
     agents: {
       standard: { type: 'codex', model: 'mock-standard', baseUrl: 'http://mock.local' },
       complex: { type: 'codex', model: 'mock-complex', baseUrl: 'http://mock.local' },
@@ -43,7 +44,9 @@ function baseAgentsConfig(stateDir: string): MultiModelConfig {
     // `beforeEach` is already keyed off, mirroring real server wiring where
     // both live under one `server.stateDir`.
     server: { stateDir },
-  } as unknown as MultiModelConfig;
+  });
+  assertRunnable(config);
+  return config;
 }
 
 function okTurn(output: string): TurnResult {
@@ -57,6 +60,9 @@ function okTurn(output: string): TurnResult {
     costUSD: 0.001,
     terminationReason: 'ok',
     toolCalls: [],
+    // A mock has no sandbox hook to count with; `null` is "not measured here", which is what
+    // codex reports for the same reason. `0` would claim the worker was observed and behaved.
+    sandboxDenialCount: null,
   };
 }
 
@@ -84,7 +90,7 @@ function crashingProvider(): Provider {
   };
 }
 
-function resolverFor(provider: Provider): (tier: AgentType, config: MultiModelConfig) => ResolvedAgent {
+function resolverFor(provider: Provider): (tier: AgentType, config: RunnableConfig) => ResolvedAgent {
   return (tier) => ({ slot: tier, provider });
 }
 
@@ -103,7 +109,7 @@ describe('ExecutionRuntime', () => {
   let projectRegistry: ProjectRegistry;
   let store: ExecutionStore;
   let bus: EnvelopeBus;
-  let TEST_CONFIG: MultiModelConfig;
+  let TEST_CONFIG: RunnableConfig;
 
   beforeEach(() => {
     cwd = mkdtempSync(join(tmpdir(), 'mma-exec-runtime-'));
@@ -123,7 +129,6 @@ describe('ExecutionRuntime', () => {
   function registerBlock(content: string): { id: string; refcount: () => number } {
     const reserve = projectRegistry.reserveProject(cwd);
     if (!reserve.ok) throw new Error(`reserve failed: ${reserve.error}`);
-    projectRegistry.cancelReservation(cwd);
     const block = reserve.projectContext.contextBlocks.register(content);
     return { id: block.id, refcount: () => reserve.projectContext.contextBlocks.refcount(block.id) };
   }
@@ -382,8 +387,9 @@ describe('ExecutionRuntime', () => {
 
   it('rejects submission when no agent can be resolved', async () => {
     const runtime = new ExecutionRuntime({
-      config: { agents: undefined } as unknown as MultiModelConfig,
+      config: TEST_CONFIG,
       bus, executionRegistry, projectRegistry, store,
+      resolveAgentFn: () => { throw new Error('agent is not configured'); },
     });
     const outcome = await runtime.submit(
       { type: 'investigate', prompt: 'q' } as never,
@@ -402,6 +408,50 @@ describe('ExecutionRuntime', () => {
    * `method`, so it must still load the generic `implement.md` and resolve no Method, never a
    * software-specific asset or guidance it inferred on its own.
    */
+  /**
+   * `orchestrate` forces `reviewPolicy: 'none'`, and its own reviewer prompt says "this reviewer is
+   * never invoked at runtime". It was invocable.
+   *
+   * `reviewPolicy` lives on commonFields, so `{ type: 'orchestrate', reviewPolicy: 'reviewed' }` is
+   * a valid request. `callerForcedReview` was computed from the RAW input and passed as
+   * `forceReview` for every type, and the pipeline checks `forceReview === true ? false : …` BEFORE
+   * consulting the resolved policy — so the reviewer ran on the one route that forces it off.
+   *
+   * The cost landed in telemetry: that run emits a `review` stage, wire rule R9 rejects a review
+   * stage on `orchestrate`, and `TelemetryUploader.receive` swallows the throw — so the entire
+   * event for that execution was dropped to a stderr line.
+   */
+  it('ignores reviewPolicy: reviewed on orchestrate, which forces none', async () => {
+    let sessionsOpened = 0;
+    const countingProvider: Provider = {
+      name: 'mock:counting',
+      config: { type: 'codex', model: 'mock', baseUrl: 'http://mock.local' } as Provider['config'],
+      openSession(_opts: SessionOpts): Session {
+        sessionsOpened += 1;
+        return {
+          async send(): Promise<TurnResult> { return okTurn('{"answer":"coordinated"}'); },
+          async close(): Promise<void> { /* no-op */ },
+          getSessionId(): string | null { return null; },
+        };
+      },
+    };
+
+    const runtime = new ExecutionRuntime({
+      config: TEST_CONFIG, bus, executionRegistry, projectRegistry, store,
+      resolveAgentFn: resolverFor(countingProvider),
+    });
+
+    const outcome = await runtime.submit(
+      { type: 'orchestrate', prompt: 'coordinate the phases', reviewPolicy: 'reviewed' } as never,
+      { clientName: 'claude-code', projectRoot: cwd },
+    );
+    expect(outcome.ok).toBe(true);
+    await waitTerminal(executionRegistry, (outcome as { ok: true; executionId: string }).executionId);
+
+    // One session: the implementer. A second is the reviewer this type forbids.
+    expect(sessionsOpened, 'a reviewer session opened on orchestrate').toBe(1);
+  });
+
   it('never infers a Method from a git-repo cwd full of source files — omitted method loads the generic implementer', async () => {
     execFileSync('git', ['init', '-q'], { cwd });
     execFileSync('git', ['config', 'user.email', 't@t'], { cwd });
@@ -502,11 +552,11 @@ describe('ExecutionRuntime', () => {
       // resolves, Task resolves, membership, `open` state, no claim to conflict on) still runs
       // for real and still passes.
       const originalExecute = initiativeRuntime.execute.bind(initiativeRuntime);
-      (initiativeRuntime as unknown as { execute: (request: unknown) => unknown }).execute = (request: unknown) => {
+      vi.spyOn(initiativeRuntime, 'execute').mockImplementation((request) => {
         const op = (request as { operation?: unknown } | null)?.operation;
         if (op === 'initiative_task_execution') throw new Error('simulated Task-transition failure');
-        return originalExecute(request as never);
-      };
+        return originalExecute(request);
+      });
 
       const runtime = new ExecutionRuntime({
         config: TEST_CONFIG, bus, executionRegistry, projectRegistry, store, initiativeRuntime,

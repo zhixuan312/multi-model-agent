@@ -22,7 +22,7 @@ describe('mma mcp command registration', () => {
     const exits: number[] = [];
     await main({
       argv: () => ['mcp', '--config', config], cwd: () => '/project', homeDir: () => '/home/test', env: () => ({ MMA_AUTH_TOKEN: 'token' }),
-      stdout: () => true, stderr: () => true, exit: ((code: number) => { exits.push(code); throw new Error(`exit:${code}`); }) as never,
+      stdout: () => true, stderr: () => true, exit: ((code: number): never => { exits.push(code); throw new Error(`exit:${code}`); }),
     }).catch((error: Error) => expect(error.message).toBe('exit:0'));
     expect(runMcpBridge).toHaveBeenCalledWith(expect.objectContaining({ daemonUrl: 'http://127.0.0.1:7337' }));
     expect(exits).toEqual([0]);
@@ -54,7 +54,7 @@ describe('mma mcp command registration', () => {
 
     await main({
       ...base, argv: () => ['mcp', '--client=agent-plugin', '--config', config], stderr: () => true,
-      exit: ((code: number) => { throw new Error(`exit:${code}`); }) as never,
+      exit: ((code: number): never => { throw new Error(`exit:${code}`); }),
     }).catch((error: Error) => expect(error.message).toBe('exit:0'));
     expect(runMcpBridge).toHaveBeenLastCalledWith(expect.objectContaining({ callerClient: 'agent-plugin' }));
 
@@ -63,7 +63,7 @@ describe('mma mcp command registration', () => {
     await main({
       ...base, argv: () => ['mcp', '--client=not-a-client', '--config', config],
       stderr: (s: string) => { errs.push(s); return true; },
-      exit: ((code: number) => { exits.push(code); throw new Error(`exit:${code}`); }) as never,
+      exit: ((code: number): never => { exits.push(code); throw new Error(`exit:${code}`); }),
     }).catch((error: Error) => expect(error.message).toBe('exit:1'));
     expect(exits).toEqual([1]);
     expect(errs.join('')).toContain('unknown --client "not-a-client"');

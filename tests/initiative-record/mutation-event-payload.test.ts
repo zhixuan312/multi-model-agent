@@ -43,31 +43,31 @@ describe('Initiative mutation event/payload contract (Task I-3 supplementary)', 
         input: { name: 'MMA', slug: 'mma' },
         expected_revision: 0,
         provenance,
-      });
+      }) as { uuid: string };
       const workspace = store.execute({
         operation: 'workspace_create',
         input: { product_id: product.uuid, name: 'Engine', slug: 'engine', description: 'd' },
         expected_revision: 0,
         provenance,
-      });
+      }) as { uuid: string };
       const resource = store.execute({
         operation: 'resource_register',
         input: { workspace_id: workspace.uuid, type: 'git_repository', canonical_locator: 'repo', description: 'd' },
         expected_revision: 0,
         provenance,
-      });
+      }) as { uuid: string };
       const initiative = store.execute({
         operation: 'initiative_create',
         input: { product_id: product.uuid, title: 'I', goal: 'g', status: 'open', outcome: null },
         expected_revision: 0,
         provenance,
-      });
+      }) as { uuid: string };
       const related = store.execute({
         operation: 'initiative_create',
         input: { product_id: product.uuid, title: 'Related', goal: 'g', status: 'open', outcome: null },
         expected_revision: 0,
         provenance,
-      });
+      }) as { uuid: string };
       store.execute({
         operation: 'initiative_status',
         input: { uuid: initiative.uuid, status: 'closed', outcome: 'delivered' },
@@ -105,7 +105,7 @@ describe('Initiative mutation event/payload contract (Task I-3 supplementary)', 
         input: { initiative_id: initiative.uuid, storage_mode: 'external', path_or_uri: '/a.md', content_hash: 'one', description: 'a' },
         expected_revision: 0,
         provenance,
-      });
+      }) as { revision: number };
       store.execute({
         operation: 'artifact_register',
         input: { initiative_id: initiative.uuid, storage_mode: 'external', path_or_uri: '/a.md', content_hash: 'two', description: 'a' },
@@ -166,19 +166,19 @@ describe('Initiative mutation event/payload contract (Task I-3 supplementary)', 
   it('rejects a stale revision on an existing-key artifact_register update without a write', () => {
     const { store, cleanup } = openStore();
     try {
-      const product = store.execute({ operation: 'product_create', input: { name: 'MMA', slug: 'mma' }, expected_revision: 0, provenance });
+      const product = store.execute({ operation: 'product_create', input: { name: 'MMA', slug: 'mma' }, expected_revision: 0, provenance }) as { uuid: string };
       const initiative = store.execute({
         operation: 'initiative_create',
         input: { product_id: product.uuid, title: 'I', goal: 'g', status: 'open', outcome: null },
         expected_revision: 0,
         provenance,
-      });
+      }) as { uuid: string };
       const first = store.execute({
         operation: 'artifact_register',
         input: { initiative_id: initiative.uuid, storage_mode: 'external', path_or_uri: '/a.md', content_hash: 'one', description: 'a' },
         expected_revision: 0,
         provenance,
-      });
+      }) as { revision: number };
       const eventCount = store.listEvents({}).length;
       expect(() =>
         store.execute({
@@ -202,26 +202,26 @@ describe('Initiative mutation event/payload contract (Task I-3 supplementary)', 
   it('emits the frozen event_type and exact payload keys for deliverable_define and deliverable_attach_artifact', () => {
     const { store, cleanup } = openStore();
     try {
-      const product = store.execute({ operation: 'product_create', input: { name: 'MMA', slug: 'mma' }, expected_revision: 0, provenance });
+      const product = store.execute({ operation: 'product_create', input: { name: 'MMA', slug: 'mma' }, expected_revision: 0, provenance }) as { uuid: string };
       const initiative = store.execute({
         operation: 'initiative_create',
         input: { product_id: product.uuid, title: 'I', goal: 'g', status: 'open', outcome: null },
         expected_revision: 0,
         provenance,
-      });
+      }) as { uuid: string };
       const artifact = store.execute({
         operation: 'artifact_register',
         input: { initiative_id: initiative.uuid, storage_mode: 'external', path_or_uri: '/a.md', description: 'a' },
         expected_revision: 0,
         provenance,
-      });
+      }) as { uuid: string };
       const beforeCount = store.listEvents({}).length;
       const deliverable = store.execute({
         operation: 'deliverable_define',
         input: { initiative_id: initiative.uuid, target_type: 'runnable-prototype', delivery_contract: 'runnable-prototype@1' },
         expected_revision: 0,
         provenance,
-      });
+      }) as { uuid: string; revision: number };
       store.execute({
         operation: 'deliverable_attach_artifact',
         input: { deliverable_id: deliverable.uuid, artifact_id: artifact.uuid, requirement: 'executable_prototype' },
@@ -258,26 +258,26 @@ describe('Initiative mutation event/payload contract (Task I-3 supplementary)', 
   it('emits the frozen event_type and exact payload keys for deliverable_validate and deliverable_deliver', () => {
     const { store, cleanup } = openStore();
     try {
-      const product = store.execute({ operation: 'product_create', input: { name: 'MMA', slug: 'mma' }, expected_revision: 0, provenance });
+      const product = store.execute({ operation: 'product_create', input: { name: 'MMA', slug: 'mma' }, expected_revision: 0, provenance }) as { uuid: string };
       const initiative = store.execute({
         operation: 'initiative_create',
         input: { product_id: product.uuid, title: 'I', goal: 'g', status: 'open', outcome: null },
         expected_revision: 0,
         provenance,
-      });
+      }) as { uuid: string };
       const deliverable = store.execute({
         operation: 'deliverable_define',
         input: { initiative_id: initiative.uuid, target_type: 'runnable-software', delivery_contract: 'runnable-software@1' },
         expected_revision: 0,
         provenance,
-      });
+      }) as { uuid: string; revision: number };
       const beforeCount = store.listEvents({}).length;
       const validated = store.execute({
         operation: 'deliverable_validate',
         input: { deliverable_id: deliverable.uuid },
         expected_revision: deliverable.revision,
         provenance,
-      });
+      }) as { revision: number };
       store.execute({
         operation: 'deliverable_deliver',
         input: { deliverable_id: deliverable.uuid, delivery_reference: 'ref-1' },
@@ -312,19 +312,19 @@ describe('Initiative mutation event/payload contract (Task I-3 supplementary)', 
   it('emits the frozen event_type and exact payload keys for deliverable_approve', () => {
     const { store, cleanup } = openStore();
     try {
-      const product = store.execute({ operation: 'product_create', input: { name: 'MMA', slug: 'mma' }, expected_revision: 0, provenance });
+      const product = store.execute({ operation: 'product_create', input: { name: 'MMA', slug: 'mma' }, expected_revision: 0, provenance }) as { uuid: string };
       const initiative = store.execute({
         operation: 'initiative_create',
         input: { product_id: product.uuid, title: 'I', goal: 'g', status: 'open', outcome: null },
         expected_revision: 0,
         provenance,
-      });
+      }) as { uuid: string };
       const deliverable = store.execute({
         operation: 'deliverable_define',
         input: { initiative_id: initiative.uuid, target_type: 'runnable-software', delivery_contract: 'runnable-software@1' },
         expected_revision: 0,
         provenance,
-      });
+      }) as { uuid: string; revision: number };
       const beforeCount = store.listEvents({}).length;
       store.execute({
         operation: 'deliverable_approve',
@@ -352,19 +352,19 @@ describe('Initiative mutation event/payload contract (Task I-3 supplementary)', 
   it('rejects invalid and stale human approvals without changing the Deliverable or emitting an Event', () => {
     const { store, cleanup } = openStore();
     try {
-      const product = store.execute({ operation: 'product_create', input: { name: 'MMA', slug: 'mma' }, expected_revision: 0, provenance });
+      const product = store.execute({ operation: 'product_create', input: { name: 'MMA', slug: 'mma' }, expected_revision: 0, provenance }) as { uuid: string };
       const initiative = store.execute({
         operation: 'initiative_create',
         input: { product_id: product.uuid, title: 'I', goal: 'g', status: 'open', outcome: null },
         expected_revision: 0,
         provenance,
-      });
+      }) as { uuid: string };
       const deliverable = store.execute({
         operation: 'deliverable_define',
         input: { initiative_id: initiative.uuid, target_type: 'runnable-software', delivery_contract: 'runnable-software@1' },
         expected_revision: 0,
         provenance,
-      });
+      }) as { uuid: string; revision: number };
       const beforeEvents = store.listEvents({});
 
       expect(() => store.execute({
@@ -392,25 +392,25 @@ describe('Initiative mutation event/payload contract (Task I-3 supplementary)', 
   it('rejects an attachment for a requirement not declared by the Delivery Contract without writing membership or an Event', () => {
     const { store, cleanup } = openStore();
     try {
-      const product = store.execute({ operation: 'product_create', input: { name: 'MMA', slug: 'mma' }, expected_revision: 0, provenance });
+      const product = store.execute({ operation: 'product_create', input: { name: 'MMA', slug: 'mma' }, expected_revision: 0, provenance }) as { uuid: string };
       const initiative = store.execute({
         operation: 'initiative_create',
         input: { product_id: product.uuid, title: 'I', goal: 'g', status: 'open', outcome: null },
         expected_revision: 0,
         provenance,
-      });
+      }) as { uuid: string };
       const artifact = store.execute({
         operation: 'artifact_register',
         input: { initiative_id: initiative.uuid, storage_mode: 'external', path_or_uri: '/a.md', description: 'a' },
         expected_revision: 0,
         provenance,
-      });
+      }) as { uuid: string };
       const deliverable = store.execute({
         operation: 'deliverable_define',
         input: { initiative_id: initiative.uuid, target_type: 'runnable-prototype', delivery_contract: 'runnable-prototype@1' },
         expected_revision: 0,
         provenance,
-      });
+      }) as { uuid: string; revision: number };
       const eventsBefore = store.listEvents({ initiative_id: initiative.uuid }).length;
 
       expect(() => store.execute({

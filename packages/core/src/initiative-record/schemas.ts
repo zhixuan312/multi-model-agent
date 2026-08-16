@@ -15,7 +15,7 @@
  * missing required values, and JSON-list values that are not string arrays (AC-1.2).
  */
 import { z } from 'zod';
-import { DELIVERY_CONTRACT_ID_PATTERN, METHOD_ID_PATTERN } from './types.js';
+import { DELIVERY_CONTRACT_ID_PATTERN, METHOD_ID_PATTERN, TERMINAL_TASK_STATUSES } from './types.js';
 
 const uuidSchema = z.string().uuid();
 const nonEmptyString = z.string().min(1);
@@ -398,7 +398,9 @@ export type InitiativeGateStatusInput = z.infer<typeof initiativeGateStatusInput
 
 const taskStatusSchema = z.enum(['open', 'claimed', 'in_progress', 'blocked', 'completed', 'cancelled']);
 const taskOutcomeSchema = z.enum(['succeeded', 'succeeded_with_concerns', 'failed', 'not_completed']).nullable();
-const TERMINAL_TASK_STATUSES = new Set(['completed', 'cancelled']);
+// One encoding of the terminal-status vocabulary, imported from the domain types rather than
+// re-listed here — two independent lists drift, and this one already had.
+const TERMINAL_TASK_STATUS_SET = new Set<string>(TERMINAL_TASK_STATUSES);
 
 export const initiativeTaskCreateInputSchema = z
   .object({
@@ -415,7 +417,7 @@ export const initiativeTaskCreateInputSchema = z
   })
   .strict()
   .superRefine((value, ctx) => {
-    const isTerminal = TERMINAL_TASK_STATUSES.has(value.status);
+    const isTerminal = TERMINAL_TASK_STATUS_SET.has(value.status);
     if (!isTerminal && value.outcome !== null) {
       ctx.addIssue({ code: 'custom', path: ['outcome'], message: 'outcome must be null for a non-terminal status' });
     }
@@ -615,6 +617,16 @@ export const deliverableApproveInputSchema = z
   })
   .strict();
 export type DeliverableApproveInput = z.infer<typeof deliverableApproveInputSchema>;
+
+// ---------------------------------------------------------------------------
+// MMA Next gap-closure — `deliverable_package` (§15: listed beside the other Deliverable
+// operations). Contract-completeness only: no `TargetAdapter` is resolved or called, so this
+// input carries nothing target-specific — just the Deliverable to assemble a packaging report
+// for.
+// ---------------------------------------------------------------------------
+
+export const deliverablePackageInputSchema = z.object({ deliverable_id: uuidSchema }).strict();
+export type DeliverablePackageInput = z.infer<typeof deliverablePackageInputSchema>;
 
 // ---------------------------------------------------------------------------
 // ArtifactRef
@@ -887,6 +899,322 @@ export const verificationListInputSchema = z
 export type VerificationListInput = z.infer<typeof verificationListInputSchema>;
 
 // ---------------------------------------------------------------------------
+// MMA Next gap-closure — `verification_run` (§15: "verification_run is absent" beside
+// verification_record). `command` is always required by shape; the store rejects a
+// non-'command' `method` with the typed `verification_method_not_runnable` error rather than
+// this schema silently dropping the field for `agent-review`/`human`.
+// ---------------------------------------------------------------------------
+
+export const verificationRunInputSchema = z
+  .object({
+    initiative_id: uuidSchema,
+    acceptance_criterion_id: uuidSchema,
+    method: verificationMethodSchema,
+    /** The declared shell command to execute for a `method: 'command'` run. */
+    command: nonEmptyString,
+  })
+  .strict();
+export type VerificationRunInput = z.infer<typeof verificationRunInputSchema>;
+
+// ---------------------------------------------------------------------------
+// MMA Next gap-closure — `initiative_export` / `initiative_import` (§15; §21 success criterion
+// 12: "an Initiative can be exported to a portable snapshot and re-imported"). Every "exported
+// entity" schema below echoes the matching frozen public shape from `types.ts` — including its
+// stored identity (`uuid`, timestamps, `revision`) — because a snapshot carries ALREADY-STORED
+// records, not fresh caller input; these are deliberately more permissive on nullable free text
+// than the create-input schemas above (e.g. plain `z.string()` rather than `nonEmptyString` for
+// an optional description), since a stored value only needs to round-trip, not satisfy a create
+// rule a second time.
+// ---------------------------------------------------------------------------
+
+const deliverableValidationStateSchema = z.enum(['pending', 'valid', 'invalid', 'human_approved']);
+const phaseRecordStateSchema = z.enum(['not_started', 'active', 'satisfied', 'reopened', 'skipped']);
+
+const exportedProductSchema = z
+  .object({
+    uuid: uuidSchema,
+    name: nonEmptyString,
+    slug: nonEmptyString,
+    createdAt: nonEmptyString,
+    updatedAt: nonEmptyString,
+    revision: z.number().int().nonnegative(),
+  })
+  .strict();
+
+const exportedWorkspaceSchema = z
+  .object({
+    uuid: uuidSchema,
+    product_id: uuidSchema,
+    name: nonEmptyString,
+    slug: nonEmptyString,
+    description: z.string(),
+    createdAt: nonEmptyString,
+    updatedAt: nonEmptyString,
+    revision: z.number().int().nonnegative(),
+  })
+  .strict();
+
+const exportedResourceSchema = z
+  .object({
+    uuid: uuidSchema,
+    workspace_id: uuidSchema,
+    type: nonEmptyString,
+    canonical_locator: nonEmptyString,
+    local_path: z.string().nullable(),
+    description: z.string(),
+    createdAt: nonEmptyString,
+    updatedAt: nonEmptyString,
+    revision: z.number().int().nonnegative(),
+  })
+  .strict();
+
+const exportedWorkspaceLinkRowSchema = z
+  .object({
+    initiative_id: uuidSchema,
+    workspace_id: uuidSchema,
+    role: z.enum(['consumes', 'references', 'modifies', 'creates', 'delivers_to']),
+    createdAt: nonEmptyString,
+    revision: z.number().int().nonnegative(),
+  })
+  .strict();
+
+const exportedWorkspaceLinkSchema = z
+  .object({
+    link: exportedWorkspaceLinkRowSchema,
+    workspace: exportedWorkspaceSchema,
+    resources: z.array(exportedResourceSchema),
+  })
+  .strict();
+
+const exportedInitiativeSchema = z
+  .object({
+    uuid: uuidSchema,
+    human_key: humanKeySchema,
+    product_id: uuidSchema,
+    title: nonEmptyString,
+    goal: nonEmptyString,
+    status: initiativeStatusSchema,
+    outcome: initiativeOutcomeSchema,
+    createdAt: nonEmptyString,
+    updatedAt: nonEmptyString,
+    revision: z.number().int().nonnegative(),
+    focus_phase: phaseSchema.nullable(),
+    lifecycle_contract: lifecycleContractIdSchema.nullable(),
+  })
+  .strict();
+
+const exportedTaskSchema = z
+  .object({
+    uuid: uuidSchema,
+    initiative_id: uuidSchema,
+    title: nonEmptyString,
+    goal: nonEmptyString,
+    status: taskStatusSchema,
+    outcome: taskOutcomeSchema,
+    claimed_by: z.string().nullable(),
+    workspace_ids: z.array(uuidSchema),
+    resource_ids: z.array(uuidSchema),
+    executionRefs: z.array(z.string()),
+    createdAt: nonEmptyString,
+    updatedAt: nonEmptyString,
+    revision: z.number().int().nonnegative(),
+    method: methodIdSchema.nullable(),
+  })
+  .strict();
+
+const exportedArtifactSchema = z
+  .object({
+    uuid: uuidSchema,
+    initiative_id: uuidSchema,
+    storage_mode: z.enum(['managed', 'external']),
+    path_or_uri: nonEmptyString,
+    content_hash: z.string().nullable(),
+    media_type: z.string().nullable(),
+    version: z.string().nullable(),
+    produced_by_task: z.string().nullable(),
+    description: z.string(),
+    createdAt: nonEmptyString,
+    updatedAt: nonEmptyString,
+    revision: z.number().int().nonnegative(),
+  })
+  .strict();
+
+const exportedRequirementSchema = z
+  .object({
+    uuid: uuidSchema,
+    initiative_id: uuidSchema,
+    human_key: requirementHumanKeySchema,
+    statement: nonEmptyString,
+    createdAt: nonEmptyString,
+    updatedAt: nonEmptyString,
+    revision: z.number().int().nonnegative(),
+  })
+  .strict();
+
+const exportedAcceptanceCriterionSchema = z
+  .object({
+    uuid: uuidSchema,
+    requirement_id: uuidSchema,
+    human_key: acceptanceCriterionHumanKeySchema,
+    statement: nonEmptyString,
+    check_reference: nonEmptyString,
+    createdAt: nonEmptyString,
+    updatedAt: nonEmptyString,
+    revision: z.number().int().nonnegative(),
+  })
+  .strict();
+
+const exportedDecisionSchema = z
+  .object({
+    uuid: uuidSchema,
+    initiative_id: uuidSchema,
+    human_key: decisionHumanKeySchema,
+    title: nonEmptyString,
+    decision: nonEmptyString,
+    rationale: nonEmptyString,
+    alternatives: z.array(z.string()),
+    status: decisionStatusSchema,
+    superseded_by: z.string().nullable(),
+    createdAt: nonEmptyString,
+    updatedAt: nonEmptyString,
+    revision: z.number().int().nonnegative(),
+  })
+  .strict();
+
+const exportedEvidenceSchema = z
+  .object({
+    uuid: uuidSchema,
+    initiative_id: uuidSchema,
+    kind: nonEmptyString,
+    locator: nonEmptyString,
+    content_hash: z.string().nullable(),
+    summary: z.string(),
+    createdAt: nonEmptyString,
+    updatedAt: nonEmptyString,
+    revision: z.number().int().nonnegative(),
+  })
+  .strict();
+
+const exportedRiskSchema = z
+  .object({
+    uuid: uuidSchema,
+    initiative_id: uuidSchema,
+    human_key: riskHumanKeySchema,
+    statement: nonEmptyString,
+    severity: riskSeveritySchema,
+    status: riskStatusValueSchema,
+    createdAt: nonEmptyString,
+    updatedAt: nonEmptyString,
+    revision: z.number().int().nonnegative(),
+  })
+  .strict();
+
+const exportedVerificationRunSchema = z
+  .object({
+    uuid: uuidSchema,
+    initiative_id: uuidSchema,
+    acceptance_criterion_id: uuidSchema,
+    method: verificationMethodSchema,
+    state: verificationStateSchema,
+    detail: z.string(),
+    createdAt: nonEmptyString,
+    revision: z.number().int().nonnegative(),
+  })
+  .strict();
+
+const exportedPhaseRecordSchema = z.object({ phase: phaseSchema, state: phaseRecordStateSchema }).strict();
+
+const exportedDeliverableSchema = z
+  .object({
+    uuid: uuidSchema,
+    initiative_id: uuidSchema,
+    target_type: nonEmptyString,
+    delivery_contract: deliveryContractIdSchema,
+    validation_state: deliverableValidationStateSchema,
+    validation_detail: z.string(),
+    delivery_reference: z.string().nullable(),
+    createdAt: nonEmptyString,
+    updatedAt: nonEmptyString,
+    revision: z.number().int().nonnegative(),
+  })
+  .strict();
+
+const exportedDeliverableMemberSchema = z
+  .object({
+    deliverable_id: uuidSchema,
+    artifact_id: uuidSchema,
+    requirement: nonEmptyString,
+    createdAt: nonEmptyString,
+  })
+  .strict();
+
+const exportedDeliveryHistorySchema = z
+  .object({
+    uuid: uuidSchema,
+    deliverable_id: uuidSchema,
+    delivery_reference: nonEmptyString,
+    validation_state: deliverableValidationStateSchema,
+    createdAt: nonEmptyString,
+  })
+  .strict();
+
+const exportedDeliverableBundleSchema = z
+  .object({
+    deliverable: exportedDeliverableSchema,
+    members: z.array(exportedDeliverableMemberSchema),
+    history: z.array(exportedDeliveryHistorySchema),
+  })
+  .strict();
+
+const exportedEventSchema = z
+  .object({
+    event_sequence: z.number().int().nonnegative(),
+    entity_type: nonEmptyString,
+    entity_id: nonEmptyString,
+    initiative_id: z.string().nullable(),
+    event_type: nonEmptyString,
+    payload: z.record(z.string(), z.unknown()),
+    actor_type: z.enum(['human', 'agent', 'system']),
+    actor_id: nonEmptyString,
+    interface: nonEmptyString,
+    initiated_by: nonEmptyString,
+    authorized_by: nonEmptyString,
+    timestamp: nonEmptyString,
+    source: nonEmptyString,
+  })
+  .strict();
+
+/** `initiative_export`'s complete portable snapshot shape — also `initiative_import`'s sole input field's schema. */
+export const initiativeExportSnapshotSchema = z
+  .object({
+    schema_version: z.number().int().positive(),
+    exported_at: nonEmptyString,
+    initiative: exportedInitiativeSchema,
+    product: exportedProductSchema,
+    workspaces: z.array(exportedWorkspaceLinkSchema),
+    tasks: z.array(exportedTaskSchema),
+    artifacts: z.array(exportedArtifactSchema),
+    requirements: z.array(exportedRequirementSchema),
+    acceptance_criteria: z.array(exportedAcceptanceCriterionSchema),
+    decisions: z.array(exportedDecisionSchema),
+    evidence: z.array(exportedEvidenceSchema),
+    risks: z.array(exportedRiskSchema),
+    verification_runs: z.array(exportedVerificationRunSchema),
+    phase_records: z.array(exportedPhaseRecordSchema),
+    deliverables: z.array(exportedDeliverableBundleSchema),
+    events: z.array(exportedEventSchema),
+  })
+  .strict();
+export type InitiativeExportSnapshotInput = z.infer<typeof initiativeExportSnapshotSchema>;
+
+/** `initiative_export` request — a bare Initiative lookup, no `event_limit` (export always carries every Event). */
+export const initiativeExportRequestSchema = z.object({ initiative: initiativeLookupSchema }).strict();
+export type InitiativeExportRequestInput = z.infer<typeof initiativeExportRequestSchema>;
+
+export const initiativeImportInputSchema = z.object({ snapshot: initiativeExportSnapshotSchema }).strict();
+export type InitiativeImportInput = z.infer<typeof initiativeImportInputSchema>;
+
+// ---------------------------------------------------------------------------
 // The generic operation envelope
 // ---------------------------------------------------------------------------
 
@@ -947,6 +1275,12 @@ export const initiativeMutationRequestSchema = z.discriminatedUnion('operation',
   // SPEC-007 Delivery Layer (Task I-6, ← AC-1.7) — the maintainer-confirmed human-approval
   // mutation, the sole path to `human_approved`.
   mutating('deliverable_approve', deliverableApproveInputSchema),
+  // MMA Next gap-closure (§15 application surface, §21 success criterion 12) — verification
+  // execution, packaging assembly, and Initiative import. `initiative_export` is excluded here:
+  // it is a dedicated read, like `initiative_resume`, never a member of this mutating union.
+  mutating('verification_run', verificationRunInputSchema),
+  mutating('deliverable_package', deliverablePackageInputSchema),
+  mutating('initiative_import', initiativeImportInputSchema),
 ]);
 export type InitiativeMutationRequest = z.infer<typeof initiativeMutationRequestSchema>;
 
@@ -1045,5 +1379,11 @@ export const initiativeOperationRequestSchema = z.discriminatedUnion('operation'
   // SPEC-007 Delivery Layer (Task I-6, ← AC-1.7) — the maintainer-confirmed human-approval
   // mutation, the sole path to `human_approved`.
   mutating('deliverable_approve', deliverableApproveInputSchema),
+
+  // MMA Next gap-closure (§15 application surface, §21 success criterion 12).
+  mutating('verification_run', verificationRunInputSchema),
+  mutating('deliverable_package', deliverablePackageInputSchema),
+  readOnly('initiative_export', initiativeExportRequestSchema),
+  mutating('initiative_import', initiativeImportInputSchema),
 ]);
 export type InitiativeOperationRequest = z.infer<typeof initiativeOperationRequestSchema>;

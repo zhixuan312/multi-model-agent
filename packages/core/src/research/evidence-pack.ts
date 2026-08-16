@@ -150,11 +150,38 @@ export function applyBudget(
     if (!dropped) break;
   }
 
-  // 4. Total-bytes cap (on original data). Estimate serialized size; drop lowest-priority first.
+  // 4. Truncate snippets FIRST, so the byte cap below measures what will actually ship.
+  //
+  // These two steps used to run the other way round: the cap counted full-length snippets and
+  // then truncation cut them to 500 characters, so a source carrying a 5,000-character snippet
+  // was charged 5,000 against the budget and shipped at ~500. The pack dropped sources it had
+  // room for — silently, since `budgetExceeded` reads the same either way.
+  sources = sources.map(s => {
+    if (s.snippet.length <= EVIDENCE_PACK_LIMITS.MAX_SNIPPET_CHARS) return s;
+    return {
+      ...s,
+      snippet: s.snippet.slice(0, EVIDENCE_PACK_LIMITS.MAX_SNIPPET_CHARS) + '…',
+    };
+  });
+
+  // 5. Total-bytes cap; drop lowest-priority first.
+  //
+  // `Buffer.byteLength`, not `.length`. The limit is named in BYTES and bounds what reaches a
+  // worker's prompt; `String.prototype.length` counts UTF-16 code units, which equals the byte
+  // count only for ASCII — and research results are the least ASCII data in this engine: paper
+  // titles, author names, publisher metadata, non-English sources. The undercount went the
+  // opposite way to the over-drop above, so neither error was bounded by the other.
+  //
+  // The `+ 100` is the per-source markdown framing `serializeEvidencePack` adds (the heading,
+  // the URL/Query/Published lines and their newlines) — an estimate, deliberately generous.
   function bytes(arr: EvidenceSource[]): number {
     let n = 0;
     for (const s of arr) {
-      n += s.title.length + s.url.length + s.snippet.length + s.query.length + 100;
+      n += Buffer.byteLength(s.title, 'utf8')
+        + Buffer.byteLength(s.url, 'utf8')
+        + Buffer.byteLength(s.snippet, 'utf8')
+        + Buffer.byteLength(s.query, 'utf8')
+        + 100;
     }
     return n;
   }
@@ -167,15 +194,6 @@ export function applyBudget(
     }
     if (!dropped) break;
   }
-
-  // 5. Truncate snippets to MAX_SNIPPET_CHARS.
-  sources = sources.map(s => {
-    if (s.snippet.length <= EVIDENCE_PACK_LIMITS.MAX_SNIPPET_CHARS) return s;
-    return {
-      ...s,
-      snippet: s.snippet.slice(0, EVIDENCE_PACK_LIMITS.MAX_SNIPPET_CHARS) + '…',
-    };
-  });
 
   return {
     sources,

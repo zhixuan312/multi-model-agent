@@ -119,13 +119,74 @@ describe('reconcileOnBoot', () => {
     }
   });
 
-  it('prunes expired terminal rows as part of reconciliation', () => {
-    store.admit('done-old', 'audit', '/repo', process.pid);
-    store.complete('done-old', '{}');
-    // Fresh terminal row within TTL → kept by the boot prune.
+  it.skipIf(process.platform === 'win32')('fences a worker spawned via MMA_CODEX_BIN, whose path need not say "codex"', async () => {
+    // The guard used to match the literal string 'codex' in the command line. But
+    // `codex-cli-launch.ts` spawns `process.env.MMA_CODEX_BIN ?? 'codex'`, and
+    // `configure-provider` actively tells operators to set that variable — so an override pointing
+    // at, say, /opt/openai/bin/agent made the guard answer "not a codex worker" for EVERY real
+    // worker. Fencing then silently did nothing while the record was still marked retryable, and a
+    // resubmit could race a live straggler in the caller's checkout.
+    const worker = spawn('bash', ['-c', 'exec -a openai-agent sleep 30'], { detached: true, stdio: 'ignore' });
+    worker.unref();
+    const pid = worker.pid!;
+    await new Promise((r) => setTimeout(r, 200));
+
+    const previous = process.env.MMA_CODEX_BIN;
+    process.env.MMA_CODEX_BIN = '/opt/openai/bin/openai-agent';
+    try {
+      store.admit('stale-override', 'execute_plan', '/repo', DEAD_PID);
+      store.recordWorkerPid('stale-override', pid);
+
+      const outcome = reconcileOnBoot(store, process.pid);
+      expect(outcome.interrupted).toBe(1);
+      expect(outcome.fencedWorkers, 'the configured binary must be fenced like the default one').toBe(1);
+    } finally {
+      if (previous === undefined) delete process.env.MMA_CODEX_BIN;
+      else process.env.MMA_CODEX_BIN = previous;
+      try { process.kill(-pid, 'SIGKILL'); } catch { /* already dead — expected */ }
+      try { process.kill(pid, 'SIGKILL'); } catch { /* already dead — expected */ }
+    }
+  });
+
+  it('keeps a terminal row that is still within its TTL', () => {
+    store.admit('done-fresh', 'audit', '/repo', process.pid);
+    store.complete('done-fresh', '{}');
     const outcome = reconcileOnBoot(store, process.pid);
     expect(outcome.prunedExpired).toBe(0);
-    expect(store.get('done-old')).toBeDefined();
+    expect(store.get('done-fresh')).toBeDefined();
+  });
+
+  /**
+   * ...and actually prunes an expired one.
+   *
+   * The case above was titled "prunes expired terminal rows as part of reconciliation" and only
+   * ever exercised the KEPT path: `prunedExpired` 0, row present. Removing
+   * `store.pruneExpired()` from `reconcileOnBoot` entirely would have left it green. The store's
+   * own pruning is covered in `execution-store.test.ts`; what was uncovered is the WIRING, which
+   * is the half that silently regresses.
+   *
+   * A second connection with a zero TTL over the same file is what makes a row expired without
+   * waiting an hour — `reconcileOnBoot` calls `pruneExpired()` with no argument, so the TTL has
+   * to come from the store it is given.
+   */
+  it('prunes a terminal row past its TTL, proving reconciliation calls the prune at all', async () => {
+    // `expires_at` is stamped on the row at terminalization from the WRITING store's ttl, so the
+    // short TTL has to be in force when the row is completed — reopening with a smaller one
+    // later changes nothing.
+    const shortDir = mkdtempSync(join(tmpdir(), 'mma-reconcile-ttl-'));
+    const expiring = new ExecutionStore({ dbPath: join(shortDir, 'executions.db'), ttlMs: 0 });
+    try {
+      expiring.admit('done-old', 'audit', '/repo', process.pid);
+      expiring.complete('done-old', '{}');
+      await new Promise((r) => setTimeout(r, 5)); // clear the same-millisecond boundary
+
+      const outcome = reconcileOnBoot(expiring, process.pid);
+      expect(outcome.prunedExpired, 'the expired terminal row must be dropped by boot').toBe(1);
+      expect(expiring.get('done-old')).toBeUndefined();
+    } finally {
+      expiring.close();
+      rmSync(shortDir, { recursive: true, force: true });
+    }
   });
 
   // SPEC-003 B6 round-2 defect B — Option 1: linkage is attached to the pending row in the SAME

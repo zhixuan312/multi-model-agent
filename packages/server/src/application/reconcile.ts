@@ -24,12 +24,38 @@ import { buildErrorEnvelope } from './result-shape.js';
 import type { TaskType } from '@zhixuan92/multi-model-agent-core';
 import { pidAlive } from '../pid-alive.js';
 
-/** True iff `pid` currently belongs to a codex worker. Guards against pid
- *  reuse: a recycled pid pointing at an unrelated process is never signalled. */
+/**
+ * True iff `pid` currently belongs to a codex worker. Guards against pid reuse: a recycled pid
+ * pointing at an unrelated process is never signalled.
+ *
+ * The command line is matched against the binary MMA ACTUALLY SPAWNS, not the literal string
+ * "codex". `codex-cli-launch.ts` runs `process.env.MMA_CODEX_BIN ?? 'codex'`, and
+ * `configure-provider` actively tells operators to set that variable. Pointing it at a binary whose
+ * path does not contain "codex" made this answer false for every real worker — so
+ * `killStaleWorkerGroup` bailed, no process group was fenced, and the record was still marked
+ * retryable. A resubmit would then race a live straggler in the caller's checkout, which is the one
+ * outcome the fencing order at the top of this module exists to prevent.
+ */
+function codexBinaryTokens(): string[] {
+  const configured = process.env.MMA_CODEX_BIN;
+  // Always keep 'codex': the default, and still correct for an override that merely relocates it.
+  const tokens = ['codex'];
+  if (configured) {
+    const basename = configured.split(/[\\/]/).pop()?.toLowerCase();
+    if (basename) tokens.push(basename);
+  }
+  return tokens;
+}
+
 function isCodexProcess(pid: number): boolean {
   try {
-    const cmd = execFileSync('ps', ['-p', String(pid), '-o', 'command='], { encoding: 'utf8' });
-    return cmd.toLowerCase().includes('codex');
+    // `ps` does not exist on Windows, so this throws and the catch below reports "process gone" —
+    // but the spawn is ATTEMPTED first, and an attempted spawn is what flashes the console.
+    const cmd = execFileSync('ps', ['-p', String(pid), '-o', 'command='], {
+      encoding: 'utf8',
+      windowsHide: true,
+    }).toLowerCase();
+    return codexBinaryTokens().some((token) => cmd.includes(token));
   } catch {
     return false; // ps failed → process gone
   }

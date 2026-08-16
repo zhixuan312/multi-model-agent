@@ -39,7 +39,7 @@ is not available in this session, run `mma clients`.
   "prompt": "Add input validation to the login handler",
   "target": { "paths": ["/project/src/auth/login.ts"] },
   "done": "All inputs validated; unit tests pass",
-  "contextBlockIds": ["cb_abc123"],
+  "contextBlockIds": ["3f2b1c8e-9a41-4d77-b0e2-5c6d8f9a1b23"],
   "reviewPolicy": "reviewed"
 }
 ```
@@ -62,13 +62,6 @@ Call `mma_run` with:
 ```json
 { "cwd": "/project", "request": { "type": "delegate", "prompt": "Refactor utils.ts to remove dead code", "target": { "paths": ["/project/src/utils.ts"] } } }
 ```
-
-## Response shapes
-
-`mma_run` returns either the terminal envelope inline (short tasks) or a `{ executionId, type, cwd }`
-handle for longer ones — poll with `mma_execution_get`, block with `mma_execution_wait`, cancel with
-`mma_execution_cancel`. See `_shared/response-shape.md` below for the full envelope shape and the
-tool call error shape.
 
 @include _shared/response-shape.md
 

@@ -23,7 +23,7 @@ Verify the implementer's debug investigation against the deliverable — code or
 
 3. **Reproduction** — specific enough to trigger the failure (exact command, input, state)? Not vague ("run the tests")?
 
-4. **Falsifier** — at least one finding should describe a concrete way to verify the fix (specific assertion, output, or observable behavior). Add a falsifier finding if missing.
+4. **Falsifier** — EVERY finding that proposes a fix must close its `evidence` with a concrete way to verify that fix (specific assertion, output, or observable behavior). There is no `falsifier` field, so it lives in the text. Add the missing sentence to the finding itself rather than emitting a separate falsifier finding — a finding whose `category` names no investigation angle is not a shape the implementer can produce.
 
 5. **Evidence quality** — read cited files to verify file:line citations are real and content matches. Remove fabricated citations.
 

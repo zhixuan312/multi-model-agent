@@ -67,7 +67,11 @@ export function buildCodexCliLaunch(input: BuildLaunchInput): CodexCliLaunch {
   // mirrors the task type's policy: `read-only` blocks all writes; `cwd-only`
   // maps to `workspace-write` (writes confined to the cwd + temp dirs).
   if (!resumeSessionId) {
-    const sandboxMode = opts.sandboxPolicy === 'read-only' ? 'read-only' : 'workspace-write';
+    // Keyed on `cwd-only`, not on `read-only`: `sandboxPolicy` is optional, and an absent
+    // policy means "none stated", which is not a licence to write. The two declared values
+    // behave exactly as before; only the unstated case changes, and it changes to the
+    // restrictive answer.
+    const sandboxMode = opts.sandboxPolicy === 'cwd-only' ? 'workspace-write' : 'read-only';
     args.push('-C', opts.cwd ?? process.cwd(), '-s', sandboxMode);
   }
 

@@ -5,8 +5,6 @@ vi.mock('../../packages/core/src/unified/repo-commit.js', () => ({
   captureBaseline: vi.fn().mockResolvedValue({ head: 'base0', branch: 'mma/x', dirtyAtDispatch: false }),
   assertRepoUntampered: vi.fn().mockResolvedValue(undefined),
   commitAll: vi.fn().mockResolvedValue({ committed: true, head: 'new1', filesChanged: [] }),
-  isGitRepo: vi.fn().mockResolvedValue(true),
-  filesChangedSince: vi.fn().mockResolvedValue([]),
 }));
 
 // When a provider rejects a request outright — the assembled prompt exceeds the

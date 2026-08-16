@@ -388,7 +388,11 @@ export class ExecutionRuntime {
     const cwd = caller.projectRoot;
 
     const typeConfig = getTypeConfig(input.type);
-    const implTier = (input as Record<string, unknown>).agentTier as AgentType | undefined ?? typeConfig.defaultTier;
+    // Read directly off the union, not through `input as Record<string, unknown>` and a second
+    // cast to AgentType. Every arm carries `agentTier?` from `commonFields` and the schema
+    // validates it as an enum, so the casts bridged nothing while telling the compiler to stop
+    // checking the one thing worth checking here — that the value really is a tier.
+    const implTier = input.agentTier ?? typeConfig.defaultTier;
     const revTier = oppositeAgent(implTier);
     // execute_plan is always reviewed: contract-first completion scoring derives
     // contract satisfaction from the reviewer's tasks[], so an unreviewed execute-plan
@@ -400,7 +404,15 @@ export class ExecutionRuntime {
         : (input.reviewPolicy ?? 'reviewed');
     // Raw caller intent: undefined when omitted. Journal routes force review only when the
     // caller explicitly asked for it; otherwise the deterministic invariants decide.
-    const callerForcedReview = input.reviewPolicy === 'reviewed';
+    //
+    // Gated on the RESOLVED policy, because `forceReview` short-circuits AHEAD of the policy check
+    // in the pipeline (`forceReview === true ? false : …`). Ungated, `{type:'orchestrate',
+    // reviewPolicy:'reviewed'}` — a valid request, since `reviewPolicy` is on commonFields — ran a
+    // reviewer on the one route that forces `none`. That emitted a `review` stage, which wire rule
+    // R9 rejects for orchestrate, so the uploader dropped the ENTIRE event for that execution to a
+    // stderr line. The type's own reviewer prompt says "this reviewer is never invoked at runtime";
+    // this makes that true.
+    const callerForcedReview = reviewPolicy !== 'none' && input.reviewPolicy === 'reviewed';
 
     // SPEC-003 B6 round-2 defect A: linked-admission validation runs as a PURE READ-ONLY phase
     // — `validateLinkedTask` — BEFORE the execution handle exists at all. A prior version ran
@@ -455,7 +467,6 @@ export class ExecutionRuntime {
     }
     const pc = reserveResult.projectContext;
     pc.lastActivityAt = Date.now();
-    deps.projectRegistry.cancelReservation(cwd);
 
     // Registering first (rather than running the Task transition first) sidesteps the ownership
     // question a failed register/admit would otherwise raise: compensating a stranded
@@ -521,7 +532,13 @@ export class ExecutionRuntime {
     this.liveScopes.set(executionId, scope);
 
     // Emit task-created diagnostic for observability.
-    deps.bus.emitPlainEntry({ ts: new Date().toISOString(), kind: 'batch_created', fields: { batch_id: executionId, route: input.type } });
+    // `task_id` / `tool`, matching the three sibling lifecycle events (`batch_completed`,
+    // `batch_failed`, `batch_cancelled`) rather than this one's own `batch_id` / `route`. One
+    // concept spelled two ways across four events emitted by one class is why `mma logs --batch`
+    // has to match four different key forms to find a single task's diagnostics. Neither field
+    // name is pinned by the observability golden (the event KINDS are), and nothing reads
+    // `batch_id` or a plain entry's `route`.
+    deps.bus.emitPlainEntry({ ts: new Date().toISOString(), kind: 'batch_created', fields: { task_id: executionId, tool: input.type } });
 
     // Run the pipeline asynchronously via setImmediate.
     const startedAtMs = Date.now();
@@ -579,7 +596,7 @@ export class ExecutionRuntime {
     } = run;
     let { skills } = run;
     const contextBlockStore = pc.contextBlocks;
-    const sessionIds = (input as Record<string, unknown>).sessionIds as { implementer?: string; reviewer?: string } | undefined;
+    const sessionIds = input.sessionIds;
     const { type: _type, agentTier: _tier, reviewPolicy: _review, sessionIds: _sessions, contextBlockIds: _blocks, initiative: _initiative, method: _method, ...payload } = input as Record<string, unknown>;
 
     // Terminal cancelled path — shared by the pre-start check, the pipeline
@@ -643,7 +660,7 @@ export class ExecutionRuntime {
       // ── Context block resolution: resolve IDs → content, pin for duration ──
       // Missing blocks are skipped (soft) — the in-memory store loses blocks
       // on server restart, and a stale block should not kill the task.
-      const inputBlockIds = (input.contextBlockIds ?? []) as string[];
+      const inputBlockIds = input.contextBlockIds ?? [];
       let resolvedContextBlocks: string[] | undefined;
       if (inputBlockIds.length > 0) {
         const blocks: string[] = [];
@@ -790,6 +807,25 @@ export class ExecutionRuntime {
           // LATER commit (landed after this execution, before replay) to this execution's work.
           commitSha: result.commitSha,
           ...(result.contractNote && { contractNote: result.contractNote }),
+          // The execute_plan completion signal, which the caller previously could not see at all.
+          //
+          // The pipeline computes `completionPercent` and returns any concern as `failureReason`
+          // (a failing acceptance command, a task the reviewer reported not-done). The envelope
+          // emitted `failureReason` ONLY when `status === 'failed'` — and execute_plan never
+          // reaches `failed`, because every concern is deliberately downgraded to
+          // `done_with_concerns` so the commit stays on the branch for a human to judge at PR
+          // review. The worst case was therefore silent: all tasks matched and reported done, the
+          // frozen acceptance commands FAILED, and the caller saw `done_with_concerns`, `error:
+          // null`, no `contractNote`, and a summary saying everything was done.
+          //
+          // The pipeline's own comment already claimed "the per-task detail is in the envelope",
+          // and the skill documents `completionPercent` as observable. Both are now true.
+          ...(result.completionPercent !== undefined && input.type === 'execute_plan'
+            ? { completionPercent: result.completionPercent }
+            : {}),
+          ...(result.status !== 'failed' && result.failureReason
+            ? { concern: result.failureReason }
+            : {}),
           contextBlockId,
           // Advisory: the reviewer ran but its output wasn't parseable, so the answer above
           // is the un-refined implementer output. This is a concern (status is already
@@ -844,6 +880,7 @@ export class ExecutionRuntime {
           caller.clientName,
           cwd, durationMs,
           pre.sourcesUsed ?? [],
+          wasCancelled,
         );
         deps.bus.emitEnvelopeSnapshot(envelope, 'seal');
       } catch (telErr) {

@@ -23,7 +23,7 @@ describe('Lifecycle transports', () => {
       const initiative = await initiativeResponse.json() as { uuid: string; revision: number };
       const mcp = await client.callTool({ name: 'mma_initiative_set_lifecycle_contract', arguments: { input: { initiative: { uuid: initiative.uuid }, lifecycle_contract: 'missing@1' }, expected_revision: initiative.revision, provenance: { actor_type: 'agent', actor_id: 'a', initiated_by: 'a', authorized_by: 'a', source: 'test' } } });
       expect(mcp.isError).toBe(true);
-      expect(JSON.parse(mcp.content[0]!.text)).toMatchObject({ error: { code: 'unknown_lifecycle_contract' } });
+      expect(JSON.parse((mcp as { content: Array<{ text: string }> }).content[0]!.text)).toMatchObject({ error: { code: 'unknown_lifecycle_contract' } });
 
       // FR-10: a successful lifecycle mutation's provenance.interface/timestamp is always
       // adapter-owned, never caller-supplied — verify for BOTH transports by supplying a bogus
@@ -38,7 +38,7 @@ describe('Lifecycle transports', () => {
       const mcpRequestStartedAt = Date.now();
       const mcpEnter = await client.callTool({ name: 'mma_initiative_phase_enter', arguments: { input: { initiative: { uuid: initiative.uuid }, phase: 'refine' }, expected_revision: focused.revision, provenance: bogusProvenance } });
       expect(mcpEnter.isError).toBeFalsy();
-      const resumeResponse = await fetch(`${h.baseUrl}/initiatives`, { method: 'POST', headers: headers(h.token), body: JSON.stringify({ operation: 'initiative_resume', initiative: { uuid: initiative.uuid } }) });
+      const resumeResponse = await fetch(`${h.baseUrl}/initiatives`, { method: 'POST', headers: headers(h.token), body: JSON.stringify({ operation: 'initiative_resume', input: { initiative: { uuid: initiative.uuid } } }) });
       expect(resumeResponse.status).toBe(200);
       const resumed = await resumeResponse.json() as { events: Array<{ event_type: string; interface: string; timestamp: string }> };
       const focusChanged = resumed.events.find((e) => e.event_type === 'focus_changed');

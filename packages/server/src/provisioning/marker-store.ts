@@ -102,9 +102,17 @@ function markerPath(stateDir: string, clientId: ClientId): string {
   return join(markersDir(stateDir), `${clientId}.json`);
 }
 
+/**
+ * `corrupt` deliberately carries NO copy of the offending bytes.
+ *
+ * It used to include a `raw: string`, which nothing ever read. Leaving it there was an invitation
+ * to log it, and a marker embeds `priorRegistration.bytesBase64` — a byte-exact copy of the user's
+ * MCP registration file, which for several clients holds an API key or a token. The recovery
+ * report says a marker is unparseable and names the client; an operator reads the file itself.
+ */
 type ReadMarkerResult =
   | { status: 'absent' }
-  | { status: 'corrupt'; raw: string }
+  | { status: 'corrupt' }
   | { status: 'ok'; marker: ProvisioningMarker };
 
 function isPlainRecord(value: unknown): value is Record<string, unknown> {
@@ -156,10 +164,10 @@ export function readMarker(stateDir: string, clientId: ClientId): ReadMarkerResu
   try {
     parsed = JSON.parse(raw);
   } catch {
-    return { status: 'corrupt', raw };
+    return { status: 'corrupt' };
   }
   const marker = validateMarker(clientId, parsed);
-  return marker ? { status: 'ok', marker } : { status: 'corrupt', raw };
+  return marker ? { status: 'ok', marker } : { status: 'corrupt' };
 }
 
 /**

@@ -16,7 +16,7 @@ describe('parseConfig', () => {
         main: minimalAgentConfig,
       },
     });
-    expect(result.agents.standard.model).toBe('test-model');
+    expect(result.agents!.standard!.model).toBe('test-model');
   });
 
   it('parses valid full config', () => {
@@ -28,7 +28,7 @@ describe('parseConfig', () => {
       },
     };
     const result = parseConfig(input);
-    expect(result.agents.complex.model).toBe('gpt-5');
+    expect(result.agents!.complex!.model).toBe('gpt-5');
   });
 
   it('accepts diagnostics.log enabled without logDir', () => {

@@ -40,7 +40,7 @@ const SIGKILL_GRACE_MS = 3000;
  *  holds within 2s for normal teardown. */
 const CLOSE_GRACE_MS = 2000;
 
-import { type BusLike, busOf } from './session-helpers.js';
+import { type BusLike, busOf, wallClockDelayMs } from './session-helpers.js';
 
 export class CodexCliSession implements Session {
   private threadId?: string;
@@ -206,6 +206,11 @@ export class CodexCliSession implements Session {
       filesWritten: [...tracker.filesWritten],
       usedShell: tracker.usedShell,
       toolCalls: [...tracker.toolCalls],
+      // Null, never 0. Codex confines writes with the OS sandbox
+      // (`-s workspace-write`), which refuses the syscall inside the child
+      // process without reporting it back, so mma has nothing to count. A 0
+      // here would claim the worker was measured and stayed in bounds.
+      sandboxDenialCount: null,
     };
   }
 
@@ -259,16 +264,16 @@ export class CodexCliSession implements Session {
       }
       killGracefully(proc);
     };
-    const deadlineMs = Math.max(0, this.args.opts.wallClockDeadline - Date.now());
+    const deadlineDelayMs = wallClockDelayMs(this.args.opts.wallClockDeadline);
     let deadlineTimer: NodeJS.Timeout | undefined;
-    if (Number.isFinite(deadlineMs) && deadlineMs > 0) {
+    if (deadlineDelayMs !== null) {
       deadlineTimer = setTimeout(() => {
         if (tracker.terminationReason === 'ok') {
           tracker.terminationReason = 'time_exceeded';
           tracker.errorCode = 'wall_clock_exceeded';
         }
         killGracefully(proc);
-      }, deadlineMs);
+      }, deadlineDelayMs);
       deadlineTimer.unref();
     }
     if (this.args.opts.abortSignal.aborted) {
@@ -299,6 +304,7 @@ export class CodexCliSession implements Session {
       filesWritten: [],
       usedShell: false,
       toolCalls: [],
+      sandboxDenialCount: null,
     };
   }
 }
@@ -430,16 +436,22 @@ class TurnTracker {
       case 'item_completed':
         this.absorbItem(ev.item);
         break;
-      case 'turn_completed':
-        this.absorbUsage(ev.usage);
+      case 'turn_completed': {
+        // Log what was ABSORBED, not what arrived. Emitting the raw `input_tokens` here put the
+        // GROSS figure on the bus under the same field name the claude runner uses for the
+        // normalized one — so the same field meant two different things depending on which
+        // runner ran the task, and the operator saw a larger input count than the run was
+        // billed on, beside a `cachedInputTokens` that is a SUBSET of it rather than a sibling.
+        const absorbed = this.absorbUsage(ev.usage);
         this.bus?.emitPlainEntry(mapProviderEventToPlainEntry('codex', 'codex_turn_completed', {
           turn: this.turns,
-          inputTokens: ev.usage.input_tokens ?? 0,
-          outputTokens: (ev.usage.output_tokens ?? 0) + (ev.usage.reasoning_output_tokens ?? 0),
-          cachedInputTokens: ev.usage.cached_input_tokens ?? 0,
+          inputTokens: absorbed.inputTokens,
+          outputTokens: absorbed.outputTokens,
+          cachedInputTokens: absorbed.cachedReadTokens,
           ...this.tag,
         }));
         break;
+      }
       case 'turn_failed':
         if (this.terminationReason === 'ok') {
           this.terminationReason = 'error';
@@ -497,7 +509,9 @@ class TurnTracker {
     }
   }
 
-  private absorbUsage(u: CodexUsage): void {
+  /** Adds one turn's usage to the cumulative total and RETURNS what it added, so callers log
+   *  the normalized figures rather than re-deriving them from the raw event. */
+  private absorbUsage(u: CodexUsage): Pick<TokenUsage, 'inputTokens' | 'outputTokens' | 'cachedReadTokens'> {
     // OpenAI / codex CLI emits `input_tokens` as GROSS (it INCLUDES
     // `cached_input_tokens` as a subset — confirmed by codex's own Rust
     // protocol: `non_cached_input = input_tokens - cached_input()`).
@@ -517,9 +531,15 @@ class TurnTracker {
     // per-token rate as output, so a single rate applies to the sum.
     const cached = u.cached_input_tokens ?? 0;
     const gross = u.input_tokens ?? 0;
-    this.cumulative.inputTokens += Math.max(0, gross - cached);
-    this.cumulative.outputTokens += (u.output_tokens ?? 0) + (u.reasoning_output_tokens ?? 0);
-    this.cumulative.cachedReadTokens += cached;
+    const absorbed = {
+      inputTokens: Math.max(0, gross - cached),
+      outputTokens: (u.output_tokens ?? 0) + (u.reasoning_output_tokens ?? 0),
+      cachedReadTokens: cached,
+    };
+    this.cumulative.inputTokens += absorbed.inputTokens;
+    this.cumulative.outputTokens += absorbed.outputTokens;
+    this.cumulative.cachedReadTokens += absorbed.cachedReadTokens;
+    return absorbed;
   }
 
   flushUsageDelta(): TokenUsage {
@@ -527,6 +547,9 @@ class TurnTracker {
       inputTokens: this.cumulative.inputTokens - this.snapshot.inputTokens,
       outputTokens: this.cumulative.outputTokens - this.snapshot.outputTokens,
       cachedReadTokens: this.cumulative.cachedReadTokens - this.snapshot.cachedReadTokens,
+      // Constant, not an oversight: cache CREATION is an Anthropic billing concept and the
+      // codex protocol emits no equivalent, so `absorbUsage` never adds to this bucket and its
+      // delta could only ever be 0. See the TokenUsage contract in types/run-result.ts.
       cachedNonReadTokens: 0,
     };
   }

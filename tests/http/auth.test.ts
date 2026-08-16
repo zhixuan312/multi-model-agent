@@ -1,8 +1,9 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import { loadToken, validateAuthHeader } from '../../packages/server/src/http/auth.js';
+import { startTestServer } from '../helpers/test-server.js';
 
 describe('loadToken', () => {
   let tmp: string;
@@ -31,16 +32,31 @@ describe('loadToken', () => {
     expect(fs.statSync(f).mode & 0o777).toBe(0o600);
   });
 
+  /**
+   * `~` expansion, without writing into the developer's real home.
+   *
+   * This used to mint a token at `~/.mma/runtime/test-token-<ts>` in the ACTUAL home directory
+   * and delete it in a `finally`. An assertion that threw before the finally, or a killed run,
+   * left files in the user's real `~/.mma` — and `~/.mma/runtime` is a live daemon path, not a
+   * scratch area. Redirecting HOME/USERPROFILE keeps the same coverage (that `loadToken` routes
+   * through `expandHome` at all) with nothing outside the temp dir.
+   */
   it('expands ~ to homedir', () => {
-    const filename = 'test-token-' + Date.now() + '-' + Math.random().toString(36).slice(2);
-    const tildePath = `~/.mma/runtime/${filename}`;
-    const resolvedPath = path.join(os.homedir(), '.mma/runtime', filename);
+    const fakeHome = fs.mkdtempSync(path.join(os.tmpdir(), 'auth-home-'));
+    const prevHome = process.env['HOME'];
+    const prevProfile = process.env['USERPROFILE'];
+    process.env['HOME'] = fakeHome;
+    process.env['USERPROFILE'] = fakeHome;
     try {
-      const tok = loadToken(tildePath);
+      const tok = loadToken('~/.mma/runtime/test-token');
       expect(tok).toBeTruthy();
-      expect(fs.existsSync(resolvedPath)).toBe(true);
+      expect(fs.existsSync(path.join(fakeHome, '.mma/runtime/test-token'))).toBe(true);
+      // ...and nowhere else: the point of the expansion is WHICH directory it lands in.
+      expect(loadToken('~/.mma/runtime/test-token')).toBe(tok);
     } finally {
-      if (fs.existsSync(resolvedPath)) fs.unlinkSync(resolvedPath);
+      if (prevHome === undefined) delete process.env['HOME']; else process.env['HOME'] = prevHome;
+      if (prevProfile === undefined) delete process.env['USERPROFILE']; else process.env['USERPROFILE'] = prevProfile;
+      fs.rmSync(fakeHome, { recursive: true, force: true });
     }
   });
 
@@ -99,5 +115,53 @@ describe('validateAuthHeader', () => {
   });
   it('uses timingSafeEqual (tokens of different length → mismatch, not throw)', () => {
     expect(validateAuthHeader('Bearer short', 'a-much-longer-expected-token').ok).toBe(false);
+  });
+
+  /**
+   * Every case above asserted only `.ok`, so the three-way `reason` — the one thing this function
+   * reports beyond pass/fail — had no coverage and no reader anywhere in the server either. It is
+   * now written to the daemon's stderr on a 401, where `missing` (client never configured),
+   * `malformed` (not a `Bearer <token>` header) and `mismatch` (stale or wrong token, e.g. an
+   * `MMA_AUTH_TOKEN` env override disagreeing with the token file) are three different operator
+   * problems that used to look identical in the log.
+   */
+  it('names which check failed, distinctly', () => {
+    expect(validateAuthHeader(undefined, 'abc')).toEqual({ ok: false, reason: 'missing' });
+    expect(validateAuthHeader('', 'abc')).toEqual({ ok: false, reason: 'missing' });
+    expect(validateAuthHeader('abc', 'abc')).toEqual({ ok: false, reason: 'malformed' });
+    expect(validateAuthHeader('Basic abc', 'abc')).toEqual({ ok: false, reason: 'malformed' });
+    expect(validateAuthHeader('Bearer a b', 'abc')).toEqual({ ok: false, reason: 'malformed' });
+    expect(validateAuthHeader('Bearer wrong', 'abc')).toEqual({ ok: false, reason: 'mismatch' });
+    expect(validateAuthHeader('Bearer short', 'a-much-longer-token')).toEqual({ ok: false, reason: 'mismatch' });
+  });
+});
+
+describe('401 responses stay generic while the daemon log does not', () => {
+  it('answers every rejection identically and records the reason on stderr', async () => {
+    const s = await startTestServer();
+    const written: string[] = [];
+    const spy = vi.spyOn(process.stderr, 'write').mockImplementation((chunk) => {
+      written.push(String(chunk));
+      return true;
+    });
+    try {
+      const cases: [string, Record<string, string>][] = [
+        ['missing', {}],
+        ['malformed', { Authorization: 'Basic zzz' }],
+        ['mismatch', { Authorization: 'Bearer definitely-not-the-token' }],
+      ];
+      for (const [reason, headers] of cases) {
+        const res = await fetch(`${s.url}/status`, { headers });
+        expect(res.status, reason).toBe(401);
+        // The body must not distinguish the three — a client learns only that it failed.
+        expect(await res.json(), reason).toEqual({
+          error: { code: 'unauthorized', message: 'Valid Bearer token required' },
+        });
+        expect(written.join(''), `stderr should name ${reason}`).toContain(`reason=${reason}`);
+      }
+    } finally {
+      spy.mockRestore();
+      await s.stop();
+    }
   });
 });

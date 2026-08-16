@@ -66,8 +66,12 @@ export async function runRestart(deps: RestartDeps): Promise<number> {
       graceMs: deps.now_ === true ? 1_000 : 35_000,
     });
     if (!outcome.stopped) {
-      if (json) stdout(JSON.stringify({ restarted: false, reason: 'still_running', pid: outcome.pid }) + '\n');
-      else stderr(`mma restart: pid ${outcome.pid} is still running after SIGKILL; not starting a replacement.\n`);
+      const reason = outcome.notOurs === true ? 'not_an_mma_daemon' : 'still_running';
+      if (json) stdout(JSON.stringify({ restarted: false, reason, pid: outcome.pid }) + '\n');
+      else if (outcome.notOurs === true) {
+        stderr(`mma restart: pid ${outcome.pid} is not an mma daemon; refusing to signal it.\n`);
+        stderr('  nothing was stopped, so nothing was started.\n');
+      } else stderr(`mma restart: pid ${outcome.pid} is still running after SIGKILL; not starting a replacement.\n`);
       // Starting anyway would just fail on the bound port, and the second
       // failure would obscure the first.
       return RestartExitCode.ERR_NOT_STOPPED;

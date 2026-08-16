@@ -70,8 +70,10 @@ is the dominant type; `research` and `recall` are usually lighter. Reasonable ra
   Most ideas land at 2–5; a broad cross-cutting one reaches ~8. This is the bulk of the fan-out.
 - **`research` — 0–3**, one task per distinct **external question**. Use **0** when the work is
   purely internal (a refactor with no prior-art question); 1–2 is typical when external practice matters.
-- **`journal_recall` — 0–3**, one task per distinct **prior-decision topic**. Use **0** for a
-  greenfield / empty journal or a trivial change; 1–2 is typical on a mature project.
+- **`journal_recall` — 1–3**, one task per distinct **prior-decision topic**; 1–2 is typical. Always
+  run at least one: an empty journal answers in a single cheap call and returns `(no prior
+  learning)`, which is information. Dropping the leg to save that call is the anti-pattern listed
+  below — you cannot know the journal is empty on this topic without asking.
 
 So the shape tracks the idea's size: a **typical** feature is ~**5-1-1**, a **large** cross-cutting
 one ~**8-2-2**, a **minor** one ~**2-0-1** (total ≈ 3–12 parallel tasks). Name each task by the
@@ -110,16 +112,26 @@ dispatches the braindump warrants (≈ 3–12 total, weighted toward `investigat
 Wait for all legs to return before synthesising. Do NOT proceed until you have every result (or
 have decided to skip investigate as greenfield).
 
+**Most legs return a HANDLE, not a result.** Only `journal_recall` comes back inline; `investigate`
+and `research` — the bulk of the fan-out — return `{ executionId, type, cwd }` with no `output` key
+at all. Poll each with `mma_execution_wait` (or `mma_execution_get`) until it is terminal, and read
+`output.summary.findings` off THAT envelope. Reading `output.summary` straight off the dispatch
+result yields `undefined`, which then trips the sentinel rule below and stamps
+"(no internal anchor — fully greenfield)" over investigations that in fact succeeded.
+
 Example (one message, parallel tool use — note multiple tasks under one type):
 
+Every leg is an `mma_run` call — there is no `mma-investigate` tool. `cwd` and `request` are both
+required, and the task body goes inside `request`:
+
 ```
-[parallel tool use]
-  mma-investigate    { prompt: "How does the streaming JSON parser handle backpressure?", target: { paths: ["src/parsers/"] } }
-  mma-investigate    { prompt: "How is the parser's output buffer sized and flushed?", target: { paths: ["src/buffers/"] } }
-  mma-research       { prompt: "State-of-the-art SIMD JSON parsers with backpressure?" }
-  mma-research       { prompt: "Prior art on adaptive buffer sizing for streaming parsers?" }
-  mma-journal-recall { prompt: "what have we learned about streaming-parser backpressure tradeoffs?" }
-  mma-journal-recall { prompt: "did we decide anything about buffer-size defaults before?" }
+[parallel tool use — six mma_run calls in one message]
+  mma_run { cwd: "/project", request: { type: "investigate", prompt: "How does the streaming JSON parser handle backpressure?", target: { paths: ["src/parsers/"] } } }
+  mma_run { cwd: "/project", request: { type: "investigate", prompt: "How is the parser's output buffer sized and flushed?", target: { paths: ["src/buffers/"] } } }
+  mma_run { cwd: "/project", request: { type: "research", prompt: "State-of-the-art SIMD JSON parsers with backpressure?" } }
+  mma_run { cwd: "/project", request: { type: "research", prompt: "Prior art on adaptive buffer sizing for streaming parsers?" } }
+  mma_run { cwd: "/project", request: { type: "journal_recall", prompt: "what have we learned about streaming-parser backpressure tradeoffs?" } }
+  mma_run { cwd: "/project", request: { type: "journal_recall", prompt: "did we decide anything about buffer-size defaults before?" } }
 ```
 
 ### Phase 4: Synthesise and write `exploration.md`
@@ -187,9 +199,9 @@ construction), **document/analysis** (produce a written analysis, report, or rec
 **no-change** (recommend leaving the current state as is, with the reasoning behind it).
 
 If the braindump names a target deliverable explicitly, every direction may resolve to that named
-deliverable. If it does not name one, the directions as a set MUST span **at least two distinct**
+deliverable. If it does not name one AND the data supports more than one direction, the set MUST span **at least two distinct**
 resolution shapes — three directions that only vary the proposed build (three ways to build the
-same kind of thing) are not divergent and fail the exploration review. A non-software problem may
+same kind of thing) are not divergent, and you are the only check on that — `explore` is a caller-side fan-out with no task type and no refiner, so nothing reviews this artifact but you. A non-software problem may
 resolve just as validly through "change the process" or "no change is needed" as through "build
 something."
 
@@ -254,12 +266,16 @@ valuable signal before design. Always run it; handle empty with `(no prior learn
 
 ❌ **Inventing citations.** Every citation traces to a leg finding or to a sentinel. Never fabricate.
 
-❌ **Padding to hit 5 directions.** One direction with high-confidence citations beats five watery
-ones. Stop at the natural number of distinct directions in the data.
+❌ **Padding to hit a direction count.** 3–5 is the target because this route exists to DIVERGE —
+converging on one answer is `mma-investigate`'s job, and a single direction usually means the
+braindump was not explored, not that the space is genuinely narrow. So look hard for the third and
+fourth. But one direction with high-confidence citations still beats five watery ones: if the data
+honestly supports fewer than three, write fewer and state in `## Rough direction` WHY the others
+were ruled out. An unexplained short list reads as laziness; an explained one is a finding.
 
 ❌ **Directions that only vary the proposed build.** Three directions that differ only in
 implementation detail (three ways to build the same feature) are not divergent — they fail the
-exploration review when no deliverable was named. **Fix:** vary the resolution shape too — weigh
+the divergence bar above when no deliverable was named — and nothing will catch it for you. **Fix:** vary the resolution shape too — weigh
 whether the problem could resolve via a process change, a configuration change, or no change at
 all, not only new construction.
 
@@ -275,7 +291,7 @@ the user's call (or `/mma-flow`'s).
 | `mma-journal-recall` failed OR returned 0 findings | Use `(no prior learning)` and continue — the journal leg is additive, never blocking. |
 | All three failed | Report all errors. Do NOT fabricate an exploration.md. |
 | Both investigate and research failed | Report both errors. Do NOT write the artifact. |
-| Investigate returned `needsCallerClarification: true` | Pause — surface the clarification need. Do NOT synthesise over an unfinished investigation. |
+| Investigate came back `done_with_concerns`, or with a non-null `output.reviewerNote` | Pause — the leg finished but its own gate flagged it. Surface what it says and do NOT synthesise over it as if clean. (There is no `needsCallerClarification` field: the investigate answer is `{answer, criteriaCovered, findings}` and Zod strips anything else, so a flag by that name could never have reached you.) |
 | Research returned 0 usable sources | Sentinel on external lines; add a one-line note under `## Current state` that external research returned nothing usable. |
 | Investigate headline reads "0 citations" but `output.summary.findings.length > 0` | Known stage-sync noise — IGNORE the headline; read `output.summary.findings` directly. |
 

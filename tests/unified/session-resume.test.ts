@@ -19,6 +19,11 @@ const mockSession = (output: string, sessionId: string | null = null) => ({
   getSessionId: vi.fn().mockReturnValue(sessionId),
 });
 
+// Reviewer fixtures use the DELEGATE reviewer shape (`{status, notes}`). They used to emit
+// `{findings, summary, verdict}` — the retired legacy-critic format that reviewer-output-parser
+// rejects by name. It parsed as nothing, so every run here silently degraded to
+// `done_with_concerns`; these tests only inspect openSession arguments and session ids, so they
+// passed anyway and the wrong shape went unnoticed.
 describe('Session resume', () => {
   it('passes resumeImplementer to implementer openSession', async () => {
     const openSession = vi.fn().mockReturnValue(
@@ -29,7 +34,7 @@ describe('Session resume', () => {
       name: 'mock',
       config: {},
       openSession: vi.fn().mockReturnValue(
-        mockSession('{"findings":[],"summary":"ok","verdict":"approved"}'),
+        mockSession('{"status":"done","notes":"ok"}'),
       ),
     };
 
@@ -62,7 +67,7 @@ describe('Session resume', () => {
       ),
     };
     const revOpenSession = vi.fn().mockReturnValue(
-      mockSession('{"findings":[],"summary":"ok","verdict":"approved"}', 'rev-resumed'),
+      mockSession('{"status":"done","notes":"ok"}', 'rev-resumed'),
     );
     const revProvider = { name: 'mock', config: {}, openSession: revOpenSession };
 
@@ -92,7 +97,7 @@ describe('Session resume', () => {
       'impl-sess-id',
     );
     const revSession = mockSession(
-      '{"findings":[],"summary":"ok","verdict":"approved"}',
+      '{"status":"done","notes":"ok"}',
       'rev-sess-id',
     );
 

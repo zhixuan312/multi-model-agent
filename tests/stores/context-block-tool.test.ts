@@ -8,7 +8,6 @@ describe('InMemoryContextBlockStore — basic CRUD', () => {
     const store = new InMemoryContextBlockStore();
     const result = store.register('hello world', { id: 'greeting' });
     expect(result.id).toBe('greeting');
-    expect(result.lengthChars).toBe(11);
     expect(store.get('greeting')).toBe('hello world');
   });
 
@@ -38,13 +37,14 @@ describe('InMemoryContextBlockStore — basic CRUD', () => {
     expect(store.delete('x')).toBe(false);
   });
 
-  it('register returns sha256 hash of content', () => {
+  it('register returns the id and nothing a caller cannot use', () => {
+    // `lengthChars` and `sha256` were removed: both surfaces that register a block read `.id`
+    // only, so the hash was computed over content up to 10 MiB and thrown away on every
+    // read-route completion. This case now pins the handle's SHAPE, so re-adding a field means
+    // deciding who reads it.
     const store = new InMemoryContextBlockStore();
     const result = store.register('hello');
-    // sha256("hello") = 2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824
-    expect(result.sha256).toBe(
-      '2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824',
-    );
+    expect(Object.keys(result)).toEqual(['id']);
   });
 });
 
@@ -185,5 +185,61 @@ describe('InMemoryContextBlockStore — v4.0 defaults', () => {
     store.register('x'.repeat(11 * 1024 * 1024), { id: 'big' });
     process.stderr.write = orig;
     expect(warns.some((w) => w.includes('>10 MiB'))).toBe(true);
+  });
+});
+
+/**
+ * `has` exists so an existence question does not become a liveness grant.
+ *
+ * `get` refreshes TTL and LRU position on purpose — that is right for a caller that wants the
+ * content. The delete handler used it to answer "does this block exist?", so a DELETE rejected as
+ * `pinned` renewed the very block it failed to remove and promoted it to newest in LRU order.
+ */
+describe('InMemoryContextBlockStore — has() does not touch TTL or LRU', () => {
+  it('reports existence without refreshing the TTL', () => {
+    vi.useFakeTimers();
+    try {
+      const store = new InMemoryContextBlockStore({ ttlMs: 1_000 });
+      store.register('content', { id: 'a' });
+
+      vi.advanceTimersByTime(900);
+      expect(store.has('a')).toBe(true);
+
+      // Had `has` refreshed the entry the way `get` does, this would still be live.
+      vi.advanceTimersByTime(200);
+      expect(store.has('a'), 'has() renewed the TTL').toBe(false);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('does not promote an entry in LRU order', () => {
+    const store = new InMemoryContextBlockStore({ maxEntries: 2 });
+    store.register('first', { id: 'a' });
+    store.register('second', { id: 'b' });
+
+    // Asking about `a` must not save it from eviction.
+    expect(store.has('a')).toBe(true);
+    store.register('third', { id: 'c' });
+
+    expect(store.has('a'), 'has() promoted the oldest entry and evicted the wrong one').toBe(false);
+    expect(store.has('b')).toBe(true);
+    expect(store.has('c')).toBe(true);
+  });
+
+  it('reports an expired entry as absent, like get', () => {
+    vi.useFakeTimers();
+    try {
+      const store = new InMemoryContextBlockStore({ ttlMs: 100 });
+      store.register('gone', { id: 'x' });
+      vi.advanceTimersByTime(101);
+      expect(store.has('x')).toBe(false);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('reports an unknown id as absent', () => {
+    expect(new InMemoryContextBlockStore().has('nope')).toBe(false);
   });
 });

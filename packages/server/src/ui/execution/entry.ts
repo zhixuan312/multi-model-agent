@@ -120,6 +120,11 @@ function formatDuration(ms: number): string {
  * arithmetic — `$-0.046495574999999995` is a real observed value — and eighteen decimal places
  * of binary-float noise reads as a bug even when the number is right. Sub-cent amounts keep
  * more precision, because rounding those to `$0.00` would be worse than useless.
+ *
+ * MAGNITUDE ONLY — the sign is dropped. The one caller that can pass a negative labels the
+ * direction itself (`Over main` vs `Saved vs main`), so `Over main $-0.05` would state it
+ * twice. A caller that shows this number WITHOUT such a label must carry the sign some other
+ * way, or it is simply lost.
  */
 function formatUsd(n: number): string {
   if (!Number.isFinite(n)) return '—';
@@ -381,6 +386,15 @@ function bootstrap(): void {
         timeoutPromise,
       ]);
       clearTimeout(timeoutHandle);
+      // An `isError` result is a FAILED poll, not a snapshot that happens to describe an
+      // error — `mcp-adapter.ts`'s `errorResult` answers this for an executionId the registry
+      // evicted, and a daemon that keeps answering it will never produce another snapshot. So
+      // it is counted, capped and named like any other poll failure, rather than leaving the
+      // panel in `update failed` forever with the reason nowhere on screen. `isError` was
+      // declared on the interface above and read by nothing before this.
+      if ((result as CallToolResult).isError === true) {
+        throw new Error((result as CallToolResult).content[0]!.text);
+      }
       failureCount = 0;
       applySnapshot(result);
     } catch (err) {

@@ -41,7 +41,7 @@ query set — no LLM, no server, no network.
   and linear keyword-scan it on every operation; the entire catalog + all node
   bodies are injected per operation; retrieval has no topic prefilter.
 - **engine** = the new path measured through the REAL public retrieval calls
-  the HTTP route makes (\`searchCandidatesForRecord\` / \`searchCandidatesForRecall\`):
+  the HTTP route makes (\`searchCandidatesForRecordBatch\` / \`searchCandidatesForRecall\`):
   \`JournalIndexStore\` FTS/BM25 + tag + graph retrieval returning top-K
   candidates; only the top-K candidate text is injected; the per-query freshness
   check is a cheap node-count comparison (\`ensureFresh\`), so latency reflects
@@ -171,5 +171,33 @@ describe('journal benchmark gates', () => {
   it('engine injects >= 80% fewer record + recall tokens than the baseline corpus dump', () => {
     expect((baseline.recordTokenTotal - engine.recordTokenTotal) / baseline.recordTokenTotal).toBeGreaterThanOrEqual(0.8);
     expect((baseline.recallTokenTotal - engine.recallTokenTotal) / baseline.recallTokenTotal).toBeGreaterThanOrEqual(0.8);
+  });
+
+  /**
+   * The ratio gate above has ~291x of headroom, so on its own it does not detect a regression.
+   *
+   * Measured: baseline 4,895,172 tokens against engine 3,363 — a 99.93% reduction against an 80%
+   * floor, which trips only above 979,034 engine tokens. Restoring full-body injection per
+   * candidate, or raising retrieval top-K to several hundred, would multiply the engine's figure by
+   * orders of magnitude and still pass. The latency gates already carry an unconditional absolute
+   * ceiling for exactly this reason (`ABSOLUTE_CEILING_MS`, and the sub-millisecond arm's
+   * `SCALING_NOISE_FLOOR_MS * 3`); the token gate had no counterpart.
+   *
+   * 20x the observed figure leaves room for fixture growth and a deliberate retrieval-width change,
+   * while catching anything that reintroduces corpus-scale injection. It is still 14x below what
+   * the ratio alone permits.
+   */
+  const ABSOLUTE_TOKEN_CEILING = 70_000;
+  it('engine token injection stays in the bounded-retrieval regime', () => {
+    expect(
+      engine.recordTokenTotal,
+      `record injection ${engine.recordTokenTotal} tokens — bounded retrieval should stay far below ${ABSOLUTE_TOKEN_CEILING}`,
+    ).toBeLessThan(ABSOLUTE_TOKEN_CEILING);
+    expect(
+      engine.recallTokenTotal,
+      `recall injection ${engine.recallTokenTotal} tokens — bounded retrieval should stay far below ${ABSOLUTE_TOKEN_CEILING}`,
+    ).toBeLessThan(ABSOLUTE_TOKEN_CEILING);
+    // And the baseline must stay corpus-scale, or the comparison above is measuring nothing.
+    expect(baseline.recordTokenTotal).toBeGreaterThan(ABSOLUTE_TOKEN_CEILING * 10);
   });
 });

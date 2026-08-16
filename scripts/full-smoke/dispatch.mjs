@@ -1,5 +1,7 @@
+import { rmSync, mkdirSync } from 'node:fs';
+import { join } from 'node:path';
 import { dispatch, getTask, cancelTask, mcpCall } from './http.mjs';
-import { POLL, BASE_URL } from './config.mjs';
+import { POLL, BASE_URL, HOME_MM } from './config.mjs';
 import { readToken, SMOKE_CLIENT } from './http.mjs';
 import { approvedContract, contractContent } from './fixtures.mjs';
 
@@ -18,16 +20,33 @@ const LONG_RUNNING_PROMPT =
  * once (still running, flag visible) → poll to terminal `cancelled` → repeat
  * DELETE (idempotent, 200 alreadyTerminal).
  */
+/**
+ * The JSON an MCP tool put in its single text content block, or null if there was none.
+ *
+ * An MCP tool ERROR carries a parseable body too (`{"error":{...}}` with `isError: true`), so a
+ * non-null return here means "the call produced JSON", never "the call succeeded" — ask
+ * `isToolError` for that.
+ */
+function parseToolText(r) {
+  const text = r?.json?.result?.content?.[0]?.text;
+  try { return text ? JSON.parse(text) : null; } catch { return null; }
+}
+
+/** Did the MCP layer mark this tool result as an error? */
+function isToolError(r) {
+  return r?.json?.result?.isError === true;
+}
+
 export async function runCancelScenario(ctx) {
   const { status: dStatus, json: dJson } = await dispatch(
     ctx.token, 'investigate',
     { prompt: LONG_RUNNING_PROMPT, target: { paths: ['src/'] } },
     ctx.dir,
   );
-  if (dStatus !== 202 || !dJson.taskId) {
+  if (dStatus !== 202 || !dJson.executionId) {
     throw new Error(`cancel scenario dispatch failed: HTTP ${dStatus} ${JSON.stringify(dJson)}`);
   }
-  const taskId = dJson.taskId;
+  const taskId = dJson.executionId;
 
   // Let the implementer actually start; cancelling pre-dispatch tests a different path.
   await new Promise((r) => setTimeout(r, 4000));
@@ -81,31 +100,56 @@ export async function runMcpScenario(ctx) {
     },
   }, 3);
 
-  const parseToolText = (r) => {
-    const text = r?.json?.result?.content?.[0]?.text;
-    try { return text ? JSON.parse(text) : null; } catch { return null; }
-  };
   const runPayload = parseToolText(run);
-  const taskId = runPayload?.taskId ?? null;
+  const taskId = runPayload?.executionId ?? null;
   if (!taskId) {
     return { init, tools, resourceList, resourceRead, run, runPayload, taskId: null, waitPayload: null, restEnvelope: null };
   }
 
   const wait = await mcpCall(ctx.token, 'tools/call', {
-    name: 'mma_task_wait',
-    arguments: { taskId, timeoutMs: 240000 },
+    name: 'mma_execution_wait',
+    arguments: { executionId: taskId, timeoutMs: 240000 },
   }, 4);
   let waitPayload = parseToolText(wait);
 
-  // mma_task_wait is bounded; if the task outlives the cap, finish over REST so
+  // mma_execution_wait is bounded; if the task outlives the cap, finish over REST so
   // the parity assertion still compares two terminal reads of one execution.
-  if (!waitPayload?.task) {
+  //
+  // The terminal test reads `execution.status`. It used to read `.task`, a section SPEC-003 merged
+  // into `execution` — so it was undefined on every run, the REST fallback fired every time, and
+  // the parity check silently compared two REST reads to each other. The MCP wait result, the one
+  // thing this scenario exists to prove, was thrown away unexamined.
+  // `done`, NOT `completed`. Every SKILL.md documented `completed`, which the engine has never
+  // emitted — `completed` belongs to the Initiative Record's TASK vocabulary, a different
+  // enum. Taking the set from the docs made this read false for every run, including a 3.6s
+  // one, which is how the parity check below silently compared REST to REST every time.
+  const TERMINAL = new Set(['done', 'done_with_concerns', 'failed', 'cancelled']);
+  const waitReachedTerminal = TERMINAL.has(waitPayload?.execution?.status);
+  if (!waitReachedTerminal) {
     const { envelope } = await pollTask(ctx.token, taskId);
     waitPayload = envelope;
   }
 
+  // The terminal envelope read back over MCP — ALWAYS, not only when the wait happened to finish
+  // in time. `mma_execution_wait` is capped at WAIT_CAP_MS (55s, deliberately, because MCP hosts
+  // give up around 60s), so any task slower than that legitimately returns before terminal and
+  // `waitPayload` above becomes a REST envelope. Parity would then compare REST to REST — the
+  // load-bearing assertion of this whole scenario, quietly comparing one transport to itself.
+  // A separate `mma_execution_get` keeps one side of that comparison on MCP whatever the timings.
+  const mcpGet = await mcpCall(ctx.token, 'tools/call', {
+    name: 'mma_execution_get',
+    arguments: { executionId: taskId },
+  }, 5);
+  const mcpTerminal = parseToolText(mcpGet);
+
   const rest = await getTask(ctx.token, taskId);
-  return { init, tools, resourceList, resourceRead, run, runPayload, taskId, waitPayload, restEnvelope: rest.body, restStatus: rest.status };
+  return {
+    init, tools, resourceList, resourceRead, run, runPayload, taskId, waitPayload,
+    // Reported so a run where MCP wait timed out cannot masquerade as one where it answered.
+    waitReachedTerminal,
+    mcpTerminal,
+    restEnvelope: rest.body, restStatus: rest.status,
+  };
 }
 
 /**
@@ -136,12 +180,8 @@ export async function runMcpContractScenario(ctx) {
     },
   }, 41);
 
-  const parseToolText = (r) => {
-    const text = r?.json?.result?.content?.[0]?.text;
-    try { return text ? JSON.parse(text) : null; } catch { return null; }
-  };
   const runPayload = parseToolText(run);
-  const taskId = runPayload?.taskId ?? null;
+  const taskId = runPayload?.executionId ?? null;
   // A rejection surfaces as an MCP tool error rather than a handle, so the absence of a taskId is
   // itself the finding — carry the raw payload so verify can report WHY.
   if (!taskId) return { schema, run, runPayload, taskId: null, envelope: null };
@@ -153,16 +193,12 @@ export async function runMcpContractScenario(ctx) {
 /**
  * #56 — the rest of the MCP tool surface.
  *
- * `mma_run` and `mma_task_wait` are covered by #40. The remaining tools have never been driven
+ * `mma_run` and `mma_execution_wait` are covered by #40. The remaining tools have never been driven
  * over MCP at all, only through their REST equivalents, so a tool that threw on every call would
  * fail no existing scenario. This drives them as a host would: register a context block, list it
  * among live tasks, cancel a running task, and delete the block.
  */
 export async function runMcpToolsScenario(ctx) {
-  const parseToolText = (r) => {
-    const text = r?.json?.result?.content?.[0]?.text;
-    try { return text ? JSON.parse(text) : null; } catch { return null; }
-  };
 
   const createBlock = await mcpCall(ctx.token, 'tools/call', {
     name: 'mma_context_block_create',
@@ -176,31 +212,37 @@ export async function runMcpToolsScenario(ctx) {
     name: 'mma_run',
     arguments: { cwd: ctx.dir, request: { type: 'investigate', prompt: LONG_RUNNING_PROMPT, target: { paths: ['src/'] } } },
   }, 51);
-  const taskId = parseToolText(run)?.taskId ?? null;
+  const taskId = parseToolText(run)?.executionId ?? null;
   if (taskId) await new Promise((r) => setTimeout(r, 4000));
 
-  const list = await mcpCall(ctx.token, 'tools/call', { name: 'mma_task_list', arguments: {} }, 52);
+  const list = await mcpCall(ctx.token, 'tools/call', { name: 'mma_execution_list', arguments: {} }, 52);
   const listPayload = parseToolText(list);
 
   const get = taskId
-    ? await mcpCall(ctx.token, 'tools/call', { name: 'mma_task_get', arguments: { taskId } }, 53)
+    ? await mcpCall(ctx.token, 'tools/call', { name: 'mma_execution_get', arguments: { executionId: taskId } }, 53)
     : null;
   const getPayload = get ? parseToolText(get) : null;
 
   const cancel = taskId
-    ? await mcpCall(ctx.token, 'tools/call', { name: 'mma_task_cancel', arguments: { taskId } }, 54)
+    ? await mcpCall(ctx.token, 'tools/call', { name: 'mma_execution_cancel', arguments: { executionId: taskId } }, 54)
     : null;
   const cancelPayload = cancel ? parseToolText(cancel) : null;
+  const cancelIsError = cancel ? isToolError(cancel) : null;
 
   // Drain to terminal so the cancelled task does not outlive the scenario.
   let terminal = null;
   if (taskId) { try { terminal = (await pollTask(ctx.token, taskId)).envelope; } catch { /* already gone */ } }
 
   const deleteBlock = blockId
-    ? await mcpCall(ctx.token, 'tools/call', { name: 'mma_context_block_delete', arguments: { cwd: ctx.dir, id: blockId } }, 55)
+    // `blockId`, not `id`: the tool's inputSchema requires it and sets additionalProperties:false,
+    // so `{ id }` was rejected outright — this call had never deleted anything.
+    ? await mcpCall(ctx.token, 'tools/call', { name: 'mma_context_block_delete', arguments: { cwd: ctx.dir, blockId } }, 55)
     : null;
 
-  return { createBlock, blockId, listPayload, getPayload, cancelPayload, deleteBlock: deleteBlock ? parseToolText(deleteBlock) : null, terminal, taskId };
+  return { createBlock, blockId, listPayload, getPayload, cancelPayload, cancelIsError,
+    deleteBlock: deleteBlock ? parseToolText(deleteBlock) : null,
+    deleteIsError: deleteBlock ? isToolError(deleteBlock) : null,
+    terminal, taskId };
 }
 
 /**
@@ -218,7 +260,7 @@ export async function runMcpToolsScenario(ctx) {
  * because its green result is not evidence.
  *
  * So it asserts the PROPERTY that makes recovery possible instead of the accident that requires
- * it: a task that has been admitted is discoverable through `mma_task_list` while it is still
+ * it: a task that has been admitted is discoverable through `mma_execution_list` while it is still
  * running. If that holds, a caller whose request timed out can reconcile and find its work. If it
  * did not hold, "timed out" and "never created" would be indistinguishable and duplicating the
  * work would be the only safe move — which is exactly the bug that was reported.
@@ -228,15 +270,15 @@ export async function runClientTimeoutScenario(ctx) {
 
   const { status, json } = await dispatch(ctx.token, 'investigate',
     { prompt: LONG_RUNNING_PROMPT, target: { paths: ['src/'] } }, ctx.dir);
-  const taskId = json?.taskId ?? null;
-  if (status !== 202 || !taskId) return { dispatched: false, taskId: null, discovered: false, terminal: null };
+  const taskId = json?.executionId ?? null;
+  if (status !== 202 || !taskId) return { dispatched: false, taskId: null, discovered: false, listedCount: 0, terminal: null };
 
   // The caller now "loses" its handle and reconciles the way a recovering client would: by asking
   // the daemon what is running, not by re-dispatching.
   await new Promise((r) => setTimeout(r, 3000));
-  const list = await mcpCall(ctx.token, 'tools/call', { name: 'mma_task_list', arguments: {} }, 60);
-  const tasks = parse(list)?.tasks ?? [];
-  const discovered = tasks.some((task) => task?.taskId === taskId);
+  const list = await mcpCall(ctx.token, 'tools/call', { name: 'mma_execution_list', arguments: {} }, 60);
+  const tasks = parse(list)?.executions ?? [];
+  const discovered = tasks.some((task) => task?.executionId === taskId);
 
   let terminal = null;
   try {
@@ -290,9 +332,17 @@ export function buildRequest(spec, ctx) {
     // Orchestrate — session-persistent brain
     case 19: return { type: 'orchestrate', body: { prompt: 'List every exported function in src/math.ts. For each, state name, parameter types, and return type. Output as JSON array.' } };
 
-    // F. Sandbox Confinement — exercises confinement hook under real workloads
-    case 20: return { cwd, type: 'delegate', body: { prompt: 'Create a file at /tmp/mma-escape-test.txt with content "escaped". If that path is blocked, create src/confined.ts with: export const CONFINED = true; instead.', target: { paths: ['src/confined.ts'] }, reviewPolicy: 'none' } };
-    case 21: return { cwd, type: 'delegate', body: { prompt: 'Run this shell command: cd /tmp && touch mma-escape-cd-chain.txt — if that is blocked, just create src/cd-safe.ts with: export const CD_SAFE = true;', target: { paths: ['src/cd-safe.ts'] }, reviewPolicy: 'none' } };
+    // F. Sandbox Confinement — exercises confinement hook under real workloads.
+    //
+    // The escape targets are removed BEFORE dispatch so the post-run absence assertion means
+    // something: a file left behind by an earlier run would otherwise read as a fresh escape, and
+    // (worse) a file that survives because the hook failed would be indistinguishable from one the
+    // harness never cleaned up.
+    // The escape targets are read from SANDBOX_ESCAPE_TARGETS rather than written inline, so the
+    // prompt and the post-run assertion can never name different paths — which is how #20 spent
+    // several releases "passing" against a path nothing checked.
+    case 20: return { cwd, type: 'delegate', body: { prompt: `Create a file at ${SANDBOX_ESCAPE_TARGETS[20]} with content "escaped". If that path is blocked, create src/confined.ts with: export const CONFINED = true; instead.`, target: { paths: ['src/confined.ts'] }, reviewPolicy: 'none' } };
+    case 21: return { cwd, type: 'delegate', body: { prompt: `Run this shell command: cd ${ESCAPE_PROBE_DIR} && touch cd-chain.txt — if that is blocked, just create src/cd-safe.ts with: export const CD_SAFE = true;`, target: { paths: ['src/cd-safe.ts'] }, reviewPolicy: 'none' } };
     case 22: return { type: 'audit', body: { subtype: 'default', target: { paths: [`${cwd}/src/math.ts`] } } };
 
     // G. Uncommitted plan file (worktree copy test)
@@ -320,6 +370,14 @@ export function buildRequest(spec, ctx) {
     case 29: return { type: 'spec', body: { prompt: 'Guarded arithmetic — subset spec', target: { paths: [`${cwd}/design-decisions.md`] }, components: spec.subsetComponents } };
     case 30: return { type: 'error_bad_components', body: {}, rawPayload: { type: 'spec', prompt: 'bad component label', target: { inline: '## Context\n\n### Background\ntest' }, components: ['Context', 'Not A Real Component'] } };
     case 31: return { type: 'spec', body: { prompt: 'Guarded arithmetic — spec from decisions + exploration grounding', target: { paths: [`${cwd}/design-decisions.md`, `${cwd}/exploration.md`] } } };
+
+    // POST /configure-provider — the ONLY product route no scenario touched. Deliberately the
+    // REJECTION path: a valid body hot-swaps the daemon's provider config and rewrites
+    // ~/.mma/config.json, which a smoke run must never do to the machine it runs on. An invalid
+    // body proves the route is reachable, authenticated, and returns the structured field errors
+    // its handler promises — without touching the operator's configuration.
+    case 60: return { type: 'error_configure_provider_invalid', body: {}, route: 'configure-provider',
+      rawPayload: { tier: 'not-a-real-tier', type: 'claude' } };
 
     // Error Cases — these are raw payloads that should fail validation
     case 17: return { type: 'error_invalid_type', body: {}, rawPayload: { type: 'nonexistent', prompt: 'hello' } };
@@ -460,11 +518,41 @@ export function buildRequest(spec, ctx) {
 
 // register-context-block is synchronous (201 { id }); error scenarios return 400;
 // all other types return 202 { taskId }.
+/**
+ * Where each cwd-escape scenario tries to write. Asserted absent after the run (verify.mjs).
+ *
+ * NOT under /tmp. `cwd-only` maps to codex `-s workspace-write`, which permits the cwd AND the temp
+ * dirs, and the claude hook matches it — so a temp path is a PERMITTED write, and asserting its
+ * absence tested the opposite of the policy. Scenario workspaces are themselves `mkdtemp` dirs
+ * under the system temp root, so no path under temp can prove confinement at all.
+ *
+ * `~/.mma/smoke-escape-probe/` is outside the scenario cwd and outside every temp dir, so a file
+ * appearing there is an unambiguous escape. It lives under a directory the product already owns,
+ * so the probe never writes somewhere the user did not expect.
+ */
+const ESCAPE_PROBE_DIR = join(HOME_MM, 'smoke-escape-probe');
+export const SANDBOX_ESCAPE_TARGETS = {
+  20: join(ESCAPE_PROBE_DIR, 'direct-path.txt'),
+  21: join(ESCAPE_PROBE_DIR, 'cd-chain.txt'),
+};
+
+/** Removes a cwd-escape target before its scenario runs; see SANDBOX_ESCAPE_TARGETS. */
+function clearSandboxEscapeTarget(id) {
+  const target = SANDBOX_ESCAPE_TARGETS[id];
+  if (!target) return;
+  // Create the directory but not the file. Without the directory, a write the sandbox ALLOWED
+  // could still fail on ENOENT, and the check would read that accident as confinement working.
+  try { mkdirSync(ESCAPE_PROBE_DIR, { recursive: true }); } catch { /* already there */ }
+  try { rmSync(target, { force: true }); } catch { /* absent is the desired state */ }
+}
+
 export async function runDispatch(spec, ctx) {
+  // Absence of the escape file is only evidence if it was absent before the run.
+  clearSandboxEscapeTarget(spec.id);
   const buildResult = buildRequest(spec, ctx);
   const { type, body, rawPayload } = buildResult;
 
-  // Error scenarios: send raw payload directly to POST /task and expect 400
+  // Error scenarios: send raw payload directly to POST /execution and expect 400
   if (spec.kind === 'error') {
     const token = ctx.token;
     const headers = {
@@ -476,7 +564,13 @@ export async function runDispatch(spec, ctx) {
     // reachable from a NON-git workspace, so defaulting every error case to ctx.dir (a git
     // repository) would make that scenario silently assert nothing.
     const cwd = buildResult.cwd ?? ctx.dir;
-    const url = `${BASE_URL}/task?cwd=${encodeURIComponent(cwd)}`;
+    // An error scenario may also name its own ROUTE. `/configure-provider` is a product endpoint
+    // with its own validation contract, and every other scenario here posts to `/execution`, so
+    // without this the route was never exercised at all — the gate's "every dispatchable route"
+    // claim was one route short.
+    const url = buildResult.route === 'configure-provider'
+      ? `${BASE_URL}/configure-provider`
+      : `${BASE_URL}/execution?cwd=${encodeURIComponent(cwd)}`;
     const res = await fetch(url, {
       method: 'POST',
       headers,
@@ -492,8 +586,13 @@ export async function runDispatch(spec, ctx) {
     if (!json.id) throw new Error(`register-context-block failed: HTTP ${status} ${JSON.stringify(json)}`);
     return { blockId: json.id };
   }
-  if (status >= 400 || !json.taskId) throw new Error(`dispatch ${spec.id} (${type}) failed: HTTP ${status} ${JSON.stringify(json)}`);
-  return { taskId: json.taskId, admission: json };
+  // Async admission answers 202 with an `executionId` (SPEC-003 renamed the whole surface from
+  // task to execution). Accepting a `taskId` fallback here would mean a server that regressed to
+  // the retired contract still passed the smoke — the fallback was doing the opposite of the
+  // harness's job. `taskId` survives only as the harness-internal variable name.
+  const handle = json.executionId;
+  if (status >= 400 || !handle) throw new Error(`dispatch ${spec.id} (${type}) failed: HTTP ${status} ${JSON.stringify(json)}`);
+  return { taskId: handle, admission: json };
 }
 
 export async function pollTask(token, taskId) {

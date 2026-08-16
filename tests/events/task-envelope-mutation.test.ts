@@ -35,65 +35,15 @@ describe('TaskEnvelopeStore mutations', () => {
     s.recordToolCall({ stage: 'implementing', tool: 'Edit', filesWritten: ['/a'] });
     const snap = s.snapshot();
     expect(snap.filesWritten).toEqual(['/a']);
-    // toolTotal counts tool calls. Two recordToolCall invocations → 2.
-    expect(snap.headline.toolTotal).toBe(2);
-    expect(snap.headline.toolWrites).toBe(1); // /a
+    expect(snap.toolCalls.map((t) => t.tool)).toEqual(['Read', 'Edit']);
   });
 
-  it('setPlannedStageTotal stabilizes headline.stageTotal as stages append', () => {
-    const notify = vi.fn();
-    const s = TaskEnvelopeStore.create(seed, notify);
-    // Driver publishes the planned visible-stage total up front.
-    s.setPlannedStageTotal(5);
-    expect(notify).toHaveBeenCalledWith('setPlannedStageTotal');
-    // Only one stage recorded so far, but the denominator reflects the plan.
-    s.startStage('implementing', { model: 'm', tier: 'standard' });
-    expect(s.snapshot().headline).toMatchObject({ stageIndex: 1, stageTotal: 5 });
-    // Reviewing started → ordinal advances to 2 even though implement is not
-    // yet completed; the running stage counts toward stageIndex.
-    s.startStage('reviewing', { model: 'm', tier: 'standard' });
-    expect(s.snapshot().headline).toMatchObject({ stageIndex: 2, stageTotal: 5, stageLabel: 'reviewing' });
-  });
-
-  it('skipped stages do not advance stageIndex or inflate stageTotal (read-route shape)', () => {
-    // Regression: read-only routes skip review/rework/commit. Those skipped
-    // stages are still recorded in env.stages, but must NOT count toward the
-    // progress ordinal/denominator — otherwise the headline jumped from
-    // [1/2] to [5/5] as the skips were recorded.
-    const s = TaskEnvelopeStore.create(seed);
-    s.setPlannedStageTotal(2); // implement + annotate after the driver decrements skips
-    s.startStage('implementing', { model: 'm', tier: 'standard' });
-    s.completeStage('implementing', 1, { outcome: 'advance', durationMs: 1 });
-    expect(s.snapshot().headline).toMatchObject({ stageIndex: 1, stageTotal: 2 });
-    // review/rework/commit skipped on a read route
-    for (const name of ['reviewing', 'reworking', 'committing'] as const) {
-      s.startStage(name, { model: 'm', tier: 'standard' });
-      s.completeStage(name, 1, { outcome: 'skipped', durationMs: 0 });
-    }
-    // Denominator stays 2 and ordinal stays 1 — skips don't count.
-    expect(s.snapshot().headline).toMatchObject({ stageIndex: 1, stageTotal: 2 });
-    // The one remaining real stage advances the ordinal to 2 of 2.
-    s.startStage('annotating', { model: 'm', tier: 'standard' });
-    expect(s.snapshot().headline).toMatchObject({ stageIndex: 2, stageTotal: 2, stageLabel: 'annotating' });
-  });
-
-  it('headline.stageTotal exceeds planned total when rework adds rounds', () => {
-    const s = TaskEnvelopeStore.create(seed);
-    s.setPlannedStageTotal(2);
-    for (const name of ['implementing', 'reviewing', 'reworking'] as const) {
-      s.startStage(name, { model: 'm', tier: 'standard' });
-    }
-    // Three recorded stages outgrow the planned 2 → max() reports the truth.
-    expect(s.snapshot().headline.stageTotal).toBe(3);
-  });
-
-  it('headline.stageTotal falls back to recorded count when total unpublished', () => {
-    const s = TaskEnvelopeStore.create(seed);
-    s.startStage('implementing', { model: 'm', tier: 'standard' });
-    s.startStage('reviewing', { model: 'm', tier: 'standard' });
-    // plannedStageTotal stays 0 (non-lifecycle envelope) → recorded count.
-    expect(s.snapshot().headline.stageTotal).toBe(2);
-  });
+  // Four tests stood here, all of them about `headline.stageIndex` / `headline.stageTotal`:
+  // a planned total stabilising the denominator, skipped stages not advancing the ordinal, rework
+  // rounds outgrowing the plan, and a fallback when no total was published. None of it ran in
+  // production. The sole producer of a real envelope wrote the headline as a constant literal and
+  // nothing read it, so `max(planned, recorded)`, the skipped-stage filter, and the fallback were
+  // all branches only this fixture could reach. The field is gone; see `task-envelope.ts` for why.
 
   it('snapshot returns immutable deep clone', () => {
     const s = TaskEnvelopeStore.create(seed);

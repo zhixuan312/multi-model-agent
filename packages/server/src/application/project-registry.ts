@@ -9,22 +9,32 @@ type ReserveResult =
 
 interface ProjectRegistryOptions {
   cap: number;
+  /**
+   * `server.limits.maxContextBlocksPerProject`, applied to each project's store.
+   *
+   * Without this the store fell back to its own hardcoded default, which happened to equal the
+   * CONFIG default — so the setting looked honoured while only one of the two registration paths
+   * respected it. `POST /context-blocks` checks the configured cap and returns 409; the runtime
+   * registers each read-route's terminal block directly (`execution-runtime.ts`), bypassing that
+   * check entirely. Lowering the setting to bound memory therefore did not bound it.
+   */
+  contextBlocksPerProject?: number;
   onProjectCreated?: (cwd: string) => void;
   /** Returns true when the project at this canonical cwd has in-flight work and
-   *  must not be evicted. Wired to `ExecutionRegistry.countActive(cwd) > 0` in
-   *  production — `pendingReservations` is NOT a reliable busy signal because it
-   *  is cancelled at dispatch, before the async task runs. */
+   *  must not be evicted. Wired to `ExecutionRegistry.countActive(cwd) > 0` in production. */
   isBusy?: (canonicalCwd: string) => boolean;
 }
 
 export class ProjectRegistry {
   private readonly map = new Map<string, ProjectContext>();
   private readonly cap: number;
+  private readonly contextBlocksPerProject?: number;
   private readonly onProjectCreated?: (cwd: string) => void;
   private readonly isBusy?: (canonicalCwd: string) => boolean;
 
   constructor(options: ProjectRegistryOptions) {
     this.cap = options.cap;
+    this.contextBlocksPerProject = options.contextBlocksPerProject;
     this.onProjectCreated = options.onProjectCreated;
     this.isBusy = options.isBusy;
   }
@@ -50,16 +60,22 @@ export class ProjectRegistry {
     return true;
   }
 
-  /** Synchronous lookup-or-create with cap enforcement. Increments pendingReservations on success. */
+  /**
+   * Synchronous lookup-or-create with cap enforcement.
+   *
+   * "Reserve" means a slot against `cap` — validating the cwd, evicting an idle project when full,
+   * and creating the context. It used to ALSO bump a `pendingReservations` counter, paired with a
+   * `cancelReservation` that decremented it. Nothing ever read that counter: eviction consults
+   * `isBusy` (wired to live task counts), `/status` reports `activeTasks` from the execution
+   * registry, and the field's own comment said it was not a reliable busy signal. Two production
+   * call sites existed solely to decrement state no decision consulted.
+   */
   reserveProject(cwd: string): ReserveResult {
     const v = validateCwd(cwd);
     if (!v.ok) return { ok: false, error: v.error, message: v.message };
     const key = v.canonicalCwd;
     const existing = this.map.get(key);
-    if (existing) {
-      existing.pendingReservations += 1;
-      return { ok: true, projectContext: existing, created: false };
-    }
+    if (existing) return { ok: true, projectContext: existing, created: false };
     if (this.map.size >= this.cap && !this.evictIdleLRU()) {
       return {
         ok: false,
@@ -67,18 +83,15 @@ export class ProjectRegistry {
         message: `server at ${this.cap} projects, all with in-flight work or retained context blocks; wait for active tasks to finish or delete unused context blocks`,
       };
     }
-    const pc = createProjectContext(key);
-    pc.pendingReservations = 1;
+    const pc = createProjectContext(
+      key,
+      this.contextBlocksPerProject !== undefined
+        ? { maxContextBlocks: this.contextBlocksPerProject }
+        : {},
+    );
     this.map.set(key, pc);
     this.onProjectCreated?.(key);
     return { ok: true, projectContext: pc, created: true };
-  }
-
-  /** Called if a reserved project's work completes. `canonicalCwd` must match `projectContext.cwd`. No-op if unknown. */
-  cancelReservation(canonicalCwd: string): void {
-    const pc = this.map.get(canonicalCwd);
-    if (!pc) return;
-    if (pc.pendingReservations > 0) pc.pendingReservations -= 1;
   }
 
   /** Look up a project by its canonical cwd. */

@@ -13,7 +13,7 @@
  * This became reachable in this release: `mma mcp install` previously wrote a
  * Claude Desktop registration and nothing else, so it had no skills to record.
  */
-import { mkdtempSync, existsSync, readFileSync } from 'node:fs';
+import { mkdtempSync, existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
@@ -58,9 +58,11 @@ describe('contract: every provisioning entry point records what it installed', (
     });
 
     expect(result.status).toBe('provisioned');
-    const manifest = join(home, '.mma', 'install-manifest.json');
-    if (existsSync(manifest)) {
-      expect(JSON.parse(readFileSync(manifest, 'utf8')).skills ?? []).toEqual([]);
-    }
+    // Asserted through `listEntries` — the reader the boot check itself uses — rather than by
+    // poking a manifest path. The previous form was `if (existsSync(path)) { expect(...) }`:
+    // a conditional assertion that runs nothing at all when the file is absent, which is also
+    // exactly what happens if the manifest ever moves. Absence and emptiness are the same
+    // answer to "what did this record?", and this asks that question the way production does.
+    expect(listEntries(home)).toEqual([]);
   });
 });

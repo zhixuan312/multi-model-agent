@@ -1,16 +1,17 @@
 import { describe, expect, it } from 'vitest';
 import { readFileSync } from 'node:fs';
+import { SPEC_COMPONENT_CATALOG } from '@zhixuan92/multi-model-agent-core';
 
-const FORGE_COMPONENTS = [
-  'Context',
-  'Problem',
-  'Goals & Requirements',
-  'Alternatives',
-  'Technical Design',
-  'Testing Plan',
-  'Risks & Mitigations',
-  'User Stories & Tasks',
-];
+/**
+ * Derived, not retyped. This is an INTERNAL consistency check — does the brainstorm skill
+ * interview the components this engine defines — so a hand-written copy could only ever fall
+ * behind `SPEC_COMPONENT_CATALOG` and go on passing over seven of eight.
+ *
+ * (`spec-forge-compat.test.ts` deliberately keeps its own literal list instead: that one pins the
+ * identifiers a SEPARATE repository matches on, and deriving it would make the test agree with a
+ * rename that breaks Forge.)
+ */
+const FORGE_COMPONENTS = SPEC_COMPONENT_CATALOG.map((entry) => entry.id);
 
 describe('mma-brainstorm SKILL.md: dispatch method and component alignment', () => {
   const skillMd = readFileSync('packages/server/src/skills/mma-brainstorm/SKILL.md', 'utf8');

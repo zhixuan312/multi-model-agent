@@ -100,7 +100,7 @@ describe('contract: built execution artifact (real bytes, real DOM)', () => {
     const app = {
       connect: vi.fn().mockResolvedValue(undefined),
       ontoolresult: undefined as ((v: unknown) => void) | undefined,
-      callServerTool: vi.fn(() =>
+      callServerTool: vi.fn((_p: { name: string; arguments: Record<string, unknown> }) =>
         Promise.resolve({ content: [{ type: 'text', text: JSON.stringify({
           executionId: 'from-run', status: 'running', phase: 'execute', elapsedMs: 1, phaseElapsedMs: 1, startedAt: '2026-01-01T00:00:00.000Z',
         }) }] })

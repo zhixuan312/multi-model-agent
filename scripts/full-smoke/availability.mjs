@@ -98,9 +98,15 @@ export function startAvailabilityProbe({ token, intervalMs = 500, baseUrl = BASE
       stopped = true;
       wake();
       await loop;
+      // No `probes === 0 ? 'NA'` arm. The loop's first iteration runs synchronously up to its
+      // `await fetch`, before `startAvailabilityProbe` returns, and `probes` is incremented once
+      // that settles regardless of `stopped` — so a probe that was started has always sampled at
+      // least once by the time `stop()` can observe it. The arm was unreachable, and the test
+      // that covered it wrapped its whole assertion in `if (result.probes === 0)`, which never
+      // held: a case for "never reports success on zero evidence" that asserted nothing.
       const status = longestOutageMs >= failMs ? 'FAIL'
         : (longestOutageMs >= Math.min(UNAVAILABLE_WARN_MS, failMs / 2) || slowestMs >= Math.min(UNAVAILABLE_WARN_MS, failMs / 2)) ? 'WARN'
-          : probes === 0 ? 'NA' : 'PASS';
+          : 'PASS';
       return {
         status,
         probes,
@@ -108,9 +114,7 @@ export function startAvailabilityProbe({ token, intervalMs = 500, baseUrl = BASE
         slowestMs,
         longestOutageMs,
         outages,
-        detail: probes === 0
-          ? 'no probes taken'
-          : `${probes} probes, ${failures} unanswered, slowest ${slowestMs}ms, longest outage ${longestOutageMs}ms`
+        detail: `${probes} probes, ${failures} unanswered, slowest ${slowestMs}ms, longest outage ${longestOutageMs}ms`
             + (status === 'FAIL'
               ? ` — the daemon was unreachable for ${longestOutageMs}ms while workers kept running.`
                 + ' That is the HTTP-wedge shape: check for synchronous work on the daemon event loop.'

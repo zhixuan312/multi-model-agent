@@ -132,7 +132,14 @@ const planAnswerSchema = z.object({
     title: z.string().min(1),
     verdict: z.enum(['executable', 'partial', 'blocked']),
     // Optional contract-first signal: whether the plan task's Contract + acceptance tests are
-    // complete. Absent on legacy plan output; a plain z.object() leaves it undefined when omitted.
+    // complete. Absence is a SIGNAL, not legacy tolerance — plan/review.md tells the reviewer to
+    // set this only when its pass directly evidences one, so omitting it means "no evidence either
+    // way". Reading it as legacy would invite deleting the optionality, which this repo's
+    // no-backward-compatibility rule would otherwise justify.
+    //
+    // This shape was ALSO declared by hand as a `PlanTaskReviewRecord` interface in
+    // reviewer-output-parser.ts, exported and consumed by nothing — two declarations of one shape,
+    // only one of which validates anything. Deleted; this schema is the single source.
     contractCompleteness: z.enum(['complete', 'incomplete']).optional(),
   })),
   notes: z.string().default(''),
@@ -204,13 +211,25 @@ const journalRecordDecisionSchema = z.array(z.object({
 }));
 
 /**
- * Self-contained fenced-```json``` extraction. No external helper —
- * reviewer-output-parser.ts exports only parseReviewerOutput. Falls back to
- * parsing the whole payload as JSON when no fence is present.
+ * Fenced-```json``` extraction for the decision payload — the LAST block, never the first.
+ *
+ * This took the FIRST fenced block, which is the exact defect `reviewer-output-parser`'s own
+ * extractor was fixed for and records in the changelog: "Last-JSON-block extraction prevents LLM
+ * preamble from corrupting parsed output". The fix reached one copy of the idea and not this one.
+ *
+ * The consequence here is worse than a corrupted answer. An implementer that shows its reasoning
+ * as a draft block and then emits the final one had its DRAFT parsed — and these decisions are
+ * applied deterministically to the journal graph, so the wrong nodes were created, refined, or
+ * superseded with nothing reporting a problem.
+ *
+ * Deliberately NOT sharing `reviewer-output-parser`'s extractor despite the overlap: its
+ * no-fence fallback matches a bare `{…}` OBJECT, while a decision payload is a top-level ARRAY.
+ * Sharing it would silently extract a fragment from the first `{` to the last `}`. Same lesson,
+ * different payload shape — so the lesson is copied, not the code.
  */
 function extractDecisionJson(text: string): unknown {
-  const fenced = text.match(/```json\s*([\s\S]*?)```/i);
-  return JSON.parse(fenced ? fenced[1] : text);
+  const fenced = [...text.matchAll(/```json\s*([\s\S]*?)```/gi)];
+  return JSON.parse(fenced.length > 0 ? fenced[fenced.length - 1]![1]! : text);
 }
 
 /**

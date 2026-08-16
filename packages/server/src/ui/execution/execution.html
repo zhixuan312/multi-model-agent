@@ -72,32 +72,6 @@
        * (a long path, a minified blob) has no spaces to wrap on and would still push the
        * panel wide. The widget must never be the reason the conversation scrolls sideways.
        */
-      /* Label/value rows. `space-between` keeps values aligned to the right edge without a
-         table, and `gap` guarantees the two never touch when a value is long. */
-      #app .stats {
-        margin-top: 0.5rem;
-        display: flex;
-        flex-direction: column;
-        gap: 0.125rem;
-      }
-
-      #app .row {
-        display: flex;
-        justify-content: space-between;
-        gap: 1rem;
-        font-size: 0.875rem;
-      }
-
-      #app .row .k {
-        color: var(--color-text-secondary, var(--mma-ink-dim));
-        white-space: nowrap;
-      }
-
-      #app .row .v {
-        text-align: right;
-        overflow-wrap: anywhere;
-      }
-
       #app .meta {
         font-size: 0.8125rem;
         opacity: 0.85;

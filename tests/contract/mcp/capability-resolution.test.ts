@@ -31,9 +31,14 @@ describe('contract: MCP capability resolution', () => {
     expect(source).toMatch(/const mcpDeps[^;]*capabilities/s);
   });
 
-  it('mcp-adapter.ts reads deps.capabilities rather than importing a capabilities constant', async () => {
+  // The single home for "the adapter resolves capabilities through one deps-carried binding".
+  // This assertion also stood in `discover.test.ts` (with the import check below) and part of it
+  // in `sdk-governance.test.ts` — one source-text fact written in three files, two of which are
+  // about something else, so tightening the pattern meant finding all three.
+  it('mcp-adapter.ts reads deps.capabilities rather than importing or inlining a capabilities constant', async () => {
     const source = await readFile('packages/server/src/mcp/mcp-adapter.ts', 'utf8');
     expect(source).not.toMatch(/capabilities:\s*\{\s*tools:/);
     expect(source.match(/deps\.capabilities/g)?.length).toBeGreaterThanOrEqual(2);
+    expect(source).not.toMatch(/import[\s\S]*MCP_CAPABILITIES[\s\S]*from ['"]\.\/tool-surface\.js['"]/);
   });
 });

@@ -25,12 +25,14 @@
  * than opening a second connection to the same file.
  */
 import { createHash, randomUUID } from 'node:crypto';
+import { spawnSync } from 'node:child_process';
 import { DatabaseSync } from 'node:sqlite';
 import {
   CrossInitiativeEvidenceLinkError,
   CrossInitiativeVerificationError,
   CrossProductWorkspaceLinkError,
   fieldErrorsFromIssues,
+  InitiativeAlreadyExistsError,
   InvalidPhaseTransitionError,
   InvalidRequestError,
   InvalidTaskTransitionError,
@@ -42,8 +44,10 @@ import {
   UnknownDeliveryContractError,
   UnknownLifecycleContractError,
   UnknownMethodError,
+  VerificationMethodNotRunnableError,
 } from './errors.js';
 import { evaluateLifecycleGate } from './lifecycle-gates.js';
+import { loadDeliveryPackager } from './delivery-packagers.js';
 import { runInitiativeMigrations } from './migrations.js';
 import { resolveTargetAdapter } from './target-adapters.js';
 import {
@@ -58,12 +62,15 @@ import {
   type DeliverableAttachArtifactInput,
   type DeliverableDefineInput,
   type DeliverableDeliverInput,
+  type DeliverablePackageInput,
   type DeliverableValidateInput,
   type EvidenceAddInput,
   type EvidenceLinkInput,
   type InitiativeBootstrapInput,
   type InitiativeCreateInput,
+  type InitiativeExportSnapshotInput,
   type InitiativeFocusSetInput,
+  type InitiativeImportInput,
   type InitiativeLinkWorkspaceInput,
   type InitiativeMutationRequest,
   type InitiativePhaseEnterInput,
@@ -86,10 +93,13 @@ import {
   type RiskAddInput,
   type RiskStatusInput,
   type VerificationRecordInput,
+  type VerificationRunInput,
   type WorkspaceCreateInput,
 } from './schemas.js';
 import {
   DEFAULT_LIFECYCLE_CONTRACT_ID,
+  DELIVERABLE_VALIDATION_STATES,
+  INITIATIVE_EXPORT_SCHEMA_VERSION,
   LIFECYCLE_PHASES,
   VERIFICATION_NON_TERMINAL_STATES,
   VERIFICATION_STALE_ELIGIBLE_STATES,
@@ -99,6 +109,8 @@ import {
   type Decision,
   type Deliverable,
   type DeliverableArtifactMember,
+  type DeliverablePackageCoverage,
+  type DeliverablePackageResult,
   type DeliverableValidationState,
   type DeliveryContract,
   type DeliveryHistoryEntry,
@@ -436,6 +448,84 @@ function canonicalize(value: unknown): unknown {
 }
 
 /**
+ * `verification_run`'s bounded local execution posture: a wall-clock cap so a hung command
+ * cannot hold the store's single write transaction open indefinitely, and an output cap so a
+ * runaway command cannot grow `verification_runs.detail` unbounded. Neither is caller-
+ * configurable — the same "no new knob without a concrete need" posture the rest of this module
+ * follows.
+ */
+/**
+ * Test-only `initiative_bootstrap` failure-injection state (audit M1-4).
+ *
+ * MODULE-level, not a member of `InitiativeRecordStore`, and absent from `initiative-record/
+ * index.ts` — that barrel NAMES its exports from this file, so this setter never reaches a
+ * consumer of the published package. As a public method it did: every caller got a
+ * failure-injection switch, and production objects carried mutable test state.
+ *
+ * It exists because it is the only way to prove the bootstrap rolls back at EACH of its seven
+ * creation steps — a real constraint violation can only reach some of them. Same shape as the
+ * resolver seam in `method-guidance.ts`, so the policy is uniform.
+ */
+let bootstrapFailureStepForTest: BootstrapFailureStep | undefined;
+
+export function setBootstrapFailureStepForTest(step: BootstrapFailureStep | undefined): void {
+  bootstrapFailureStepForTest = step;
+}
+
+/** Initiative-wide inputs shared across a six-phase gate sweep (audit M1-11). */
+interface GateInputs {
+  requirements: ReturnType<InitiativeRecordStore['listRequirements']>;
+  acceptanceCriteria: ReturnType<InitiativeRecordStore['listAcceptanceCriteria']>;
+  decisions: ReturnType<InitiativeRecordStore['listDecisions']>;
+  events: ReturnType<InitiativeRecordStore['listEvents']>;
+  deliverableValidationStates: DeliverableValidationState[];
+}
+
+/** Result of running a declared verification command, computed outside the write transaction. */
+interface VerificationCommandOutcome { state: VerificationRun['state']; detail: string; }
+
+const VERIFICATION_RUN_TIMEOUT_MS = 120_000;
+const VERIFICATION_RUN_MAX_BUFFER_BYTES = 10 * 1024 * 1024;
+/** Persisted `detail` text is capped well below any practical SQLite TEXT concern — this bounds
+ *  what a single verification run can add to `initiatives.db`'s size, not SQLite's own limit. */
+const VERIFICATION_RUN_DETAIL_MAX_CHARS = 20_000;
+
+/**
+ * Splits a declared verification command into argv WITHOUT a shell. Supports single and double
+ * quoting so a path containing spaces still works; everything else is a literal argument, so a
+ * metacharacter is passed to the program rather than interpreted.
+ */
+function parseVerificationCommand(command: string): string[] {
+  const argv: string[] = [];
+  let current = '';
+  let quote: '"' | "'" | null = null;
+  let has = false;
+  for (const ch of command) {
+    if (quote) {
+      if (ch === quote) quote = null;
+      else { current += ch; has = true; }
+    } else if (ch === '"' || ch === "'") { quote = ch; has = true; }
+    else if (/\s/.test(ch)) { if (has) { argv.push(current); current = ''; has = false; } }
+    else { current += ch; has = true; }
+  }
+  if (has) argv.push(current);
+  return argv;
+}
+
+/** Combines a `spawnSync` result's stdout/stderr into one block, labeling stderr when present. */
+function combineCommandOutput(stdout: string | Buffer | null, stderr: string | Buffer | null): string {
+  const out = stdout ? stdout.toString() : '';
+  const err = stderr ? stderr.toString() : '';
+  return err ? `${out}\n--- stderr ---\n${err}`.trim() : out.trim();
+}
+
+/** Truncates a `verification_run` detail string to `VERIFICATION_RUN_DETAIL_MAX_CHARS`, noting the cut. */
+function truncateVerificationDetail(detail: string): string {
+  if (detail.length <= VERIFICATION_RUN_DETAIL_MAX_CHARS) return detail;
+  return `${detail.slice(0, VERIFICATION_RUN_DETAIL_MAX_CHARS)}\n...[truncated]`;
+}
+
+/**
  * The idempotency identity's canonical request hash (FR-8): operation +
  * business input + mutation control + the five CALLER-OWNED provenance fields.
  * The two ADAPTER-STAMPED fields (`interface`, `timestamp`) are excluded —
@@ -468,8 +558,6 @@ function computeRequestHash(
 
 export class InitiativeRecordStore implements InitiativeRepository {
   private closed = false;
-  /** Test-only `initiative_bootstrap` failure-injection hook — see `setBootstrapFailureStepForTest`. */
-  private bootstrapFailureStepForTest: BootstrapFailureStep | undefined;
 
   private constructor(private readonly db: DatabaseSync) {}
 
@@ -501,23 +589,7 @@ export class InitiativeRecordStore implements InitiativeRepository {
     }
   }
 
-  /** Test/inspection use: this store connection's own pragma settings. */
-  inspectPragmas(): InitiativeRecordStorePragmas {
-    const journalRow = this.db.prepare('PRAGMA journal_mode').get() as { journal_mode?: string } | undefined;
-    const busyRow = this.db.prepare('PRAGMA busy_timeout').get() as { timeout?: number } | undefined;
-    return {
-      journal_mode: String(journalRow?.journal_mode ?? ''),
-      busy_timeout: Number(busyRow?.timeout ?? 0),
-    };
-  }
 
-  /** Test/inspection use: table and view names currently present in the schema. */
-  listSchemaTables(): string[] {
-    const rows = this.db
-      .prepare(`SELECT name FROM sqlite_master WHERE type IN ('table', 'view')`)
-      .all() as Array<{ name?: string }>;
-    return rows.map((row) => String(row.name));
-  }
 
   /**
    * Validates `rawRequest` against {@link initiativeMutationRequestSchema} and,
@@ -534,6 +606,15 @@ export class InitiativeRecordStore implements InitiativeRepository {
     }
     const request = parsed.data;
     const requestHash = computeRequestHash(request.operation, request.input, request.expected_revision, request.provenance);
+
+    // `verification_run` is the ONE operation that waits on something outside SQLite, and it may
+    // wait up to VERIFICATION_RUN_TIMEOUT_MS. Running it inside the write transaction below would
+    // hold `BEGIN IMMEDIATE` — and therefore block every other read and write on this connection —
+    // for the whole duration of somebody's test suite. The command runs here, before the lock is
+    // taken; the transaction then only persists its result, which is fast (audit M1-3).
+    const preRunVerification = request.operation === 'verification_run'
+      ? this.runVerificationCommand(request.input as VerificationRunInput)
+      : undefined;
 
     this.db.exec('BEGIN IMMEDIATE');
     try {
@@ -569,7 +650,7 @@ export class InitiativeRecordStore implements InitiativeRepository {
         }
       }
 
-      const result = this.applyMutation(request);
+      const result = this.applyMutation(request, preRunVerification);
 
       if (request.idempotency_key) {
         this.db
@@ -591,7 +672,23 @@ export class InitiativeRecordStore implements InitiativeRepository {
     }
   }
 
-  /** Test/inspection use: stored Events, optionally scoped to one Initiative, ordered by `event_sequence` ascending. */
+  /**
+   * This store connection's own pragma settings. Connection state — `busy_timeout` in particular —
+   * is per-connection and invisible to any other reader of the same file, so the only way to
+   * assert the store configures its connection correctly is to ask the store. Kept for that
+   * reason; the schema-shape sibling was removed because a plain connection can read it (audit
+   * M1-10).
+   */
+  inspectPragmas(): InitiativeRecordStorePragmas {
+    const journalRow = this.db.prepare('PRAGMA journal_mode').get() as { journal_mode?: string } | undefined;
+    const busyRow = this.db.prepare('PRAGMA busy_timeout').get() as { timeout?: number } | undefined;
+    return {
+      journal_mode: String(journalRow?.journal_mode ?? ''),
+      busy_timeout: Number(busyRow?.timeout ?? 0),
+    };
+  }
+
+  /** Stored Events, optionally scoped to one Initiative, ordered by `event_sequence` ascending. */
   listEvents(filter: { initiative_id?: string } = {}): Event[] {
     const rows = (
       filter.initiative_id
@@ -804,6 +901,74 @@ export class InitiativeRecordStore implements InitiativeRepository {
     return rows.map(mapDeliveryHistoryRow);
   }
 
+  /** Every `DeliverableArtifactMember` row for one Deliverable (MMA Next gap-closure: shared by
+   *  `deliverable_package` and `initiative_export`), ordered `created_at` ascending, then
+   *  `artifact_id`/`requirement` ascending for a stable, deterministic order. */
+  listDeliverableMembers(filter: { deliverable_id: string }): DeliverableArtifactMember[] {
+    const rows = this.db
+      .prepare(
+        `SELECT deliverable_id, artifact_id, requirement, created_at FROM deliverable_artifacts WHERE deliverable_id = ? ORDER BY created_at ASC, artifact_id ASC, requirement ASC`,
+      )
+      .all(filter.deliverable_id) as unknown as DeliverableArtifactRow[];
+    return rows.map(mapDeliverableArtifactRow);
+  }
+
+  /** Resume/export count: Deliverable counts by validation_state — every `DeliverableValidationState` key present, defaulting to `0` (mirrors `countVerificationByState`). */
+  countDeliverablesByValidationState(initiativeId: string): Record<DeliverableValidationState, number> {
+    const counts = Object.fromEntries(DELIVERABLE_VALIDATION_STATES.map((state) => [state, 0])) as Record<
+      DeliverableValidationState,
+      number
+    >;
+    const rows = this.db
+      .prepare(`SELECT validation_state, COUNT(*) AS count FROM deliverables WHERE initiative_id = ? GROUP BY validation_state`)
+      .all(initiativeId) as Array<{ validation_state: DeliverableValidationState; count: number }>;
+    for (const row of rows) {
+      counts[row.validation_state] = Number(row.count);
+    }
+    return counts;
+  }
+
+  /**
+   * Export join (MMA Next gap-closure): the Initiative's Workspace links, each carrying its OWN
+   * `InitiativeWorkspaceLink` row (`created_at`/`revision`) — unlike `getInitiativeWorkspaceLinks`
+   * (the resume join, which omits link-level metadata) — plus the joined Workspace and Resources.
+   */
+  listInitiativeWorkspaceLinksWithDetail(filter: {
+    initiative_id: string;
+  }): Array<{ link: InitiativeWorkspaceLink; workspace: Workspace; resources: Resource[] }> {
+    const rows = this.db
+      .prepare(`SELECT * FROM initiative_workspace_links WHERE initiative_id = ? ORDER BY created_at ASC, workspace_id ASC, role ASC`)
+      .all(filter.initiative_id) as unknown as LinkRow[];
+    return rows.map((row) => {
+      const workspaceRow = this.db.prepare(`SELECT * FROM workspaces WHERE uuid = ?`).get(row.workspace_id) as
+        | WorkspaceRow
+        | undefined;
+      if (!workspaceRow) {
+        throw new NotFoundError({ entity_type: 'Workspace', lookup: row.workspace_id });
+      }
+      const workspace = mapWorkspaceRow(workspaceRow);
+      const link: InitiativeWorkspaceLink = {
+        initiative_id: row.initiative_id,
+        workspace_id: row.workspace_id,
+        role: row.role,
+        createdAt: row.created_at,
+        revision: Number(row.revision),
+      };
+      return { link, workspace, resources: this.listResources({ workspace_id: workspace.uuid }) };
+    });
+  }
+
+  /**
+   * Export read (MMA Next gap-closure): every PERSISTED `phase_records` row for one Initiative,
+   * in `LIFECYCLE_PHASES` order — no synthesized `not_started` defaults (unlike
+   * {@link getPhaseStates}, which this reuses: no code path ever stores a `'not_started'` row, so
+   * filtering its overlay to non-default entries is exactly "which rows exist").
+   */
+  listPhaseRecords(filter: { initiative_id: string }): Array<{ phase: Phase; state: PhaseRecordState }> {
+    const states = this.getPhaseStates(filter.initiative_id);
+    return LIFECYCLE_PHASES.filter((phase) => states[phase] !== 'not_started').map((phase) => ({ phase, state: states[phase] }));
+  }
+
   /** Returns the raw `deliverables` row for `uuid`, or throws `not_found`. Shared by reads and the attach mutation's revision check. */
   private requireDeliverableRow(uuid: string): DeliverableRow {
     const row = this.db.prepare(`SELECT * FROM deliverables WHERE uuid = ?`).get(uuid) as DeliverableRow | undefined;
@@ -1001,11 +1166,6 @@ export class InitiativeRecordStore implements InitiativeRepository {
       .prepare(`SELECT * FROM artifact_refs WHERE initiative_id = ? ORDER BY created_at ASC, uuid ASC`)
       .all(initiativeId) as unknown as ArtifactRefRow[];
     return rows.map(mapArtifactRefRow);
-  }
-
-  /** Same read as {@link listInitiativeArtifacts}, in the object-filter shape every other `list*` method on this class takes. */
-  listArtifacts(filter: { initiative_id: string }): ArtifactRef[] {
-    return this.listInitiativeArtifacts(filter.initiative_id);
   }
 
   /** Resume join: the newest `limit` Events for the Initiative, ordered by `event_sequence` descending. */
@@ -1211,17 +1371,28 @@ export class InitiativeRecordStore implements InitiativeRepository {
    * has any Verification Run, with `latest` selected by `createdAt` descending, then `uuid` descending.
    */
   getLatestVerificationRuns(initiativeId: string): LatestVerificationRead[] {
+    // One query for the whole Initiative, not one per Acceptance Criterion (audit M1-16). The
+    // window function picks each criterion's newest run under the SAME ordering the per-criterion
+    // query used, so the selected row is identical — this is a shape change, not a semantic one.
+    // Criteria are still visited in requirement order so the returned sequence is unchanged.
+    const rows = this.db
+      .prepare(
+        `SELECT * FROM (
+           SELECT vr.*, ROW_NUMBER() OVER (
+             PARTITION BY vr.acceptance_criterion_id ORDER BY vr.created_at DESC, vr.uuid DESC
+           ) AS rank_in_criterion
+           FROM verification_runs vr
+           WHERE vr.initiative_id = ?
+         ) WHERE rank_in_criterion = 1`,
+      )
+      .all(initiativeId) as unknown as VerificationRunRow[];
+    const latestByCriterion = new Map(rows.map((row) => [row.acceptance_criterion_id, mapVerificationRunRow(row)]));
+
     const results: LatestVerificationRead[] = [];
     for (const { acceptance_criteria } of this.getRequirementsWithCriteria(initiativeId)) {
       for (const criterion of acceptance_criteria) {
-        const row = this.db
-          .prepare(
-            `SELECT * FROM verification_runs WHERE acceptance_criterion_id = ? ORDER BY created_at DESC, uuid DESC LIMIT 1`,
-          )
-          .get(criterion.uuid) as VerificationRunRow | undefined;
-        if (row) {
-          results.push({ acceptance_criterion_id: criterion.uuid, latest: mapVerificationRunRow(row) });
-        }
+        const latest = latestByCriterion.get(criterion.uuid);
+        if (latest) results.push({ acceptance_criterion_id: criterion.uuid, latest });
       }
     }
     return results;
@@ -1284,7 +1455,11 @@ export class InitiativeRecordStore implements InitiativeRepository {
   }
 
   /** Dispatches one validated mutating request to its write handler. Runs inside the caller's open transaction. */
-  private applyMutation(request: InitiativeMutationRequest): InitiativeRecordEntity {
+  private applyMutation(
+    request: InitiativeMutationRequest,
+    /** Pre-executed `verification_run` outcome; see `execute()` (audit M1-3). */
+    preRunVerification?: VerificationCommandOutcome,
+  ): InitiativeRecordEntity {
     switch (request.operation) {
       case 'product_create':
         return this.mutateProductCreate(request.input, request.expected_revision, request.provenance);
@@ -1369,6 +1544,16 @@ export class InitiativeRecordStore implements InitiativeRepository {
       // mutation — same one-transactional-call pattern as every mutation above.
       case 'deliverable_approve':
         return this.mutateDeliverableApprove(request.input, request.expected_revision, request.provenance);
+      // MMA Next gap-closure (§15 application surface, §21 success criterion 12): verification
+      // execution, packaging assembly, and Initiative import — same one-transactional-call
+      // pattern as every mutation above. `initiative_export` is not here: it is a dedicated
+      // read (`InitiativeRecordRuntime.initiativeExport`), like `initiative_resume`.
+      case 'verification_run':
+        return this.mutateVerificationRun(request.input, request.expected_revision, request.provenance, preRunVerification);
+      case 'deliverable_package':
+        return this.mutateDeliverablePackage(request.input, request.expected_revision, request.provenance);
+      case 'initiative_import':
+        return this.mutateInitiativeImport(request.input, request.expected_revision, request.provenance);
       default: {
         // The switch above is exhaustive over `InitiativeMutationRequest`;
         // `request` narrows to `never` here. This branch only guards a future
@@ -2012,8 +2197,24 @@ export class InitiativeRecordStore implements InitiativeRepository {
 
   /**
    * `initiative_task_claim` (SPEC-003 FR-8, FR-9): `open → claimed` only,
-   * setting `claimed_by` to `provenance.actor_id`. Any other source status
+   * setting `claimed_by` to `provenance.authorized_by`. Any other source status
    * throws `task_not_claimable`.
+   *
+   * `authorized_by`, NOT `actor_id`. Every operation that later checks ownership —
+   * `release` (:2242), `complete` (:2277) and `execution`'s gated `claimed → in_progress`
+   * (:2302, "the same rule as FR-5 admission") — compares `claimed_by` against
+   * `provenance.authorized_by`. Writing `actor_id` here meant any caller whose two fields
+   * differ could claim a Task and then never release, complete or advance it: permanently
+   * stuck `claimed`, with `task_claim_conflict` on every attempt.
+   *
+   * That is not hypothetical. This engine's own `application/initiative-linker.ts` sets
+   * `actor_id: 'system:initiative-linker'` — a constant — while carrying the real caller
+   * forward in `authorized_by`, so for the linker the two ALWAYS differ.
+   *
+   * It survived because every claim test built provenance with
+   * `actor_id === initiated_by === authorized_by`, so no test could tell which field was
+   * written or read. The full-smoke harness, whose provenance sets them to different real
+   * values, is what surfaced it.
    */
   private mutateInitiativeTaskClaim(input: InitiativeTaskClaimInput, expectedRevision: number, provenance: ProvenanceInput): Task {
     const row = this.requireTaskRow(input.uuid);
@@ -2023,7 +2224,7 @@ export class InitiativeRecordStore implements InitiativeRepository {
     }
     const now = provenance.timestamp;
     const nextRevision = row.revision + 1;
-    const claimedBy = provenance.actor_id;
+    const claimedBy = provenance.authorized_by;
     this.db
       .prepare(`UPDATE tasks SET status = 'claimed', claimed_by = ?, updated_at = ?, revision = ? WHERE uuid = ?`)
       .run(claimedBy, now, nextRevision, row.uuid);
@@ -2645,6 +2846,59 @@ export class InitiativeRecordStore implements InitiativeRepository {
     return updated;
   }
 
+  /**
+   * `deliverable_package` (MMA Next gap-closure, §15: listed beside the other Deliverable
+   * operations). Assembles the packaging result for a Deliverable from its Delivery Contract's
+   * `requires` list and its CURRENT artifact membership only: which entries are covered, by
+   * which member Artifacts, and which are still missing. Contract-completeness only — this
+   * method never resolves or calls a `TargetAdapter` (unlike `deliverable_validate`) and never
+   * invents file content; the committed packager guidance (`loadDeliveryPackager`) supplies the
+   * "how to package" prose. Incomplete membership SUCCEEDS and reports the gaps — the engine
+   * records and advises, it never blocks packaging on missing coverage. Bumps the Deliverable's
+   * revision (like `deliverable_attach_artifact`) even though no `deliverables` column value
+   * changes, so a caller can chain a following mutation without an intervening read.
+   */
+  private mutateDeliverablePackage(
+    input: DeliverablePackageInput,
+    expectedRevision: number,
+    provenance: ProvenanceInput,
+  ): DeliverablePackageResult {
+    const deliverableRow = this.requireDeliverableRow(input.deliverable_id);
+    this.requireDeliverableRevision(deliverableRow, expectedRevision);
+    const contract = this.getDeliveryContractOrThrow(deliverableRow.delivery_contract);
+    const members = this.listDeliverableMembers({ deliverable_id: input.deliverable_id });
+
+    const coverage: DeliverablePackageCoverage[] = contract.requires.map((requirement) => ({
+      requirement,
+      members: members
+        .filter((member) => member.requirement === requirement)
+        .map((member) => ({
+          artifact_id: member.artifact_id,
+          path_or_uri: this.requireRow<ArtifactRefRow>('artifact_refs', member.artifact_id, 'artifact_id', 'ArtifactRef')
+            .path_or_uri,
+        })),
+    }));
+    const missing = coverage.filter((entry) => entry.members.length === 0).map((entry) => entry.requirement);
+    const complete = missing.length === 0;
+    const packagingGuidance = loadDeliveryPackager(deliverableRow.delivery_contract);
+
+    const now = provenance.timestamp;
+    const nextRevision = deliverableRow.revision + 1;
+    this.db.prepare(`UPDATE deliverables SET updated_at = ?, revision = ? WHERE uuid = ?`).run(now, nextRevision, input.deliverable_id);
+    const updated: Deliverable = { ...mapDeliverableRow(deliverableRow), updatedAt: now, revision: nextRevision };
+
+    this.writeEvent({
+      entity_type: 'Deliverable',
+      entity_id: input.deliverable_id,
+      initiative_id: deliverableRow.initiative_id,
+      event_type: 'deliverable_packaged',
+      payload: { uuid: input.deliverable_id, delivery_contract: deliverableRow.delivery_contract, complete, missing },
+      provenance,
+    });
+
+    return { ...updated, coverage, missing, complete, packaging_guidance: packagingGuidance };
+  }
+
   // ---------------------------------------------------------------------
   // Phase A1 — professional record and verification ledger (SPEC-002 FR-3).
   // Task I-3 scope: the seven ordinary mutations below. `evidence_link` and
@@ -2947,20 +3201,8 @@ export class InitiativeRecordStore implements InitiativeRepository {
     };
   }
 
-  /**
-   * Test-only failure injection for `initiative_bootstrap` (SPEC-006 Task I-3): when set, the
-   * write phase throws immediately after the named step's creation, proving the whole-transaction
-   * rollback guarantee end to end. Non-exported from the public barrel and never invoked by
-   * production code — HTTP and MCP callers only ever reach `execute()`, never a direct
-   * `InitiativeRecordStore` reference, so this hook is structurally unreachable through either
-   * transport. Test/inspection use only.
-   */
-  setBootstrapFailureStepForTest(step: BootstrapFailureStep | undefined): void {
-    this.bootstrapFailureStepForTest = step;
-  }
-
   private maybeForceBootstrapFailure(step: BootstrapFailureStep): void {
-    if (this.bootstrapFailureStepForTest === step) {
+    if (bootstrapFailureStepForTest === step) {
       throw new Error(`forced bootstrap failure after ${step} creation`);
     }
   }
@@ -3314,10 +3556,36 @@ export class InitiativeRecordStore implements InitiativeRepository {
     provenance: ProvenanceInput,
   ): VerificationRun {
     this.requireCreateRevision(expectedRevision, 'VerificationRun');
-    this.requireExists('initiatives', input.initiative_id, 'initiative_id', 'Initiative');
+    const { initiativeId, acceptanceCriterionId } = this.requireVerificationTarget(
+      input.initiative_id,
+      input.acceptance_criterion_id,
+    );
+    return this.insertVerificationRun({
+      initiativeId,
+      acceptanceCriterionId,
+      method: input.method,
+      state: input.state,
+      detail: input.detail,
+      eventType: 'verification_recorded',
+      provenance,
+    });
+  }
+
+  /**
+   * Shared `acceptance_criterion_id`-belongs-to-`initiative_id` check both `verification_record`
+   * and `verification_run` require (FR-10 / MMA Next gap-closure): resolves the Acceptance
+   * Criterion through its Requirement and confirms the Requirement's own `initiative_id` matches
+   * the caller's. Throws `not_found` for an unknown Acceptance Criterion and
+   * `cross_initiative_verification` for a cross-Initiative mismatch, before any write.
+   */
+  private requireVerificationTarget(
+    initiativeId: string,
+    acceptanceCriterionId: string,
+  ): { initiativeId: string; acceptanceCriterionId: string } {
+    this.requireExists('initiatives', initiativeId, 'initiative_id', 'Initiative');
     const criterionRow = this.requireRow<AcceptanceCriterionRow>(
       'acceptance_criteria',
-      input.acceptance_criterion_id,
+      acceptanceCriterionId,
       'acceptance_criterion_id',
       'AcceptanceCriterion',
     );
@@ -3327,43 +3595,59 @@ export class InitiativeRecordStore implements InitiativeRepository {
       'requirement_id',
       'Requirement',
     );
-    if (requirementRow.initiative_id !== input.initiative_id) {
-      throw new CrossInitiativeVerificationError({
-        initiative_id: input.initiative_id,
-        acceptance_criterion_id: input.acceptance_criterion_id,
-      });
+    if (requirementRow.initiative_id !== initiativeId) {
+      throw new CrossInitiativeVerificationError({ initiative_id: initiativeId, acceptance_criterion_id: acceptanceCriterionId });
     }
+    return { initiativeId, acceptanceCriterionId };
+  }
 
+  /**
+   * Shared VerificationRun persistence (FR-10): inserts a new immutable run, writes its Event
+   * under `eventType`, then supersedes every prior non-terminal run for the same Acceptance
+   * Criterion (the pinned `VERIFICATION_NON_TERMINAL_STATES` set), emitting one
+   * `verification_superseded` Event per changed run. Shared by `verification_record` (caller-
+   * asserted) and `verification_run` (command-executed) — both persist a VerificationRun
+   * identically; only how `state`/`detail` are derived differs.
+   */
+  private insertVerificationRun(params: {
+    initiativeId: string;
+    acceptanceCriterionId: string;
+    method: VerificationRun['method'];
+    state: VerificationRun['state'];
+    detail: string;
+    eventType: string;
+    provenance: ProvenanceInput;
+  }): VerificationRun {
     const uuid = randomUUID();
-    const now = provenance.timestamp;
+    const now = params.provenance.timestamp;
     this.db
       .prepare(
         `INSERT INTO verification_runs (uuid, initiative_id, acceptance_criterion_id, method, state, detail, created_at, revision) VALUES (?, ?, ?, ?, ?, ?, ?, 0)`,
       )
-      .run(uuid, input.initiative_id, input.acceptance_criterion_id, input.method, input.state, input.detail, now);
+      .run(uuid, params.initiativeId, params.acceptanceCriterionId, params.method, params.state, params.detail, now);
     const run: VerificationRun = {
       uuid,
-      initiative_id: input.initiative_id,
-      acceptance_criterion_id: input.acceptance_criterion_id,
-      method: input.method,
-      state: input.state,
-      detail: input.detail,
+      initiative_id: params.initiativeId,
+      acceptance_criterion_id: params.acceptanceCriterionId,
+      method: params.method,
+      state: params.state,
+      detail: params.detail,
       createdAt: now,
       revision: 0,
     };
     this.writeEvent({
       entity_type: 'VerificationRun',
       entity_id: uuid,
-      initiative_id: input.initiative_id,
-      event_type: 'verification_recorded',
+      initiative_id: params.initiativeId,
+      event_type: params.eventType,
       payload: {
         uuid,
-        initiative_id: input.initiative_id,
-        acceptance_criterion_id: input.acceptance_criterion_id,
-        method: input.method,
-        state: input.state,
+        initiative_id: params.initiativeId,
+        acceptance_criterion_id: params.acceptanceCriterionId,
+        method: params.method,
+        state: params.state,
       },
-      provenance,
+      provenance: params.provenance,
     });
 
     const nonTerminalPlaceholders = VERIFICATION_NON_TERMINAL_STATES.map(() => '?').join(', ');
@@ -3371,7 +3655,7 @@ export class InitiativeRecordStore implements InitiativeRepository {
       .prepare(
         `SELECT * FROM verification_runs WHERE acceptance_criterion_id = ? AND uuid != ? AND state IN (${nonTerminalPlaceholders})`,
       )
-      .all(input.acceptance_criterion_id, uuid, ...VERIFICATION_NON_TERMINAL_STATES) as unknown as VerificationRunRow[];
+      .all(params.acceptanceCriterionId, uuid, ...VERIFICATION_NON_TERMINAL_STATES) as unknown as VerificationRunRow[];
     for (const priorRow of priorRows) {
       const nextRevision = priorRow.revision + 1;
       this.db
@@ -3383,11 +3667,137 @@ export class InitiativeRecordStore implements InitiativeRepository {
         initiative_id: priorRow.initiative_id,
         event_type: 'verification_superseded',
         payload: { uuid: priorRow.uuid, acceptance_criterion_id: priorRow.acceptance_criterion_id },
-        provenance,
+        provenance: params.provenance,
       });
     }
 
     return run;
+  }
+
+  /**
+   * `verification_run` (MMA Next gap-closure, §15: listed beside `verification_record`).
+   * Executes a declared shell command for an Acceptance Criterion whose `method` is `'command'`,
+   * captures its exit status and combined output, and persists the resulting VerificationRun —
+   * `'pass'` for exit 0, `'fail'` for any other exit code, `'blocked'` when the command could not
+   * be run at all (spawn failure or the bounded timeout below). `'agent-review'`/`'human'` are
+   * rejected with the typed `verification_method_not_runnable` error before any write; those stay
+   * reachable only through `verification_record`.
+   *
+   * Security-sink review: `input.command` reaches a shell (`node:child_process`, no network
+   * access added). This is the SAME trust boundary as every other Initiative Record mutation —
+   * the loopback-only, bearer-authenticated HTTP/MCP surface (`request-pipeline.ts`,
+   * `loopback-enforcer.ts`) already trusts every caller with free-text writes (Decision prose,
+   * Evidence locators, Artifact paths); a caller able to reach this operation could already
+   * reach the host's own shell through any other MMA execution route. No additional escaping or
+   * allow-listing is layered on top, because the command is meant to run declared local
+   * verification exactly as given (e.g. `npm test`), not a sanitizable fixed argument list.
+   */
+  /**
+   * The directory a `verification_run` is confined to: the first local path declared by a Resource
+   * under any Workspace linked to this Initiative. Refuses when none exists — an unconfined run
+   * would inherit the daemon's cwd and become a sandbox escape (audit M1-1).
+   */
+  private resolveVerificationRunCwd(initiativeId: string): string {
+    for (const { resources } of this.listInitiativeWorkspaceLinksWithDetail({ initiative_id: initiativeId })) {
+      for (const resource of resources) {
+        if (resource.local_path) return resource.local_path;
+      }
+    }
+    throw new InvalidRequestError({
+      field_errors: {
+        initiative_id: [
+          'verification_run needs a local working directory to run inside: link a Workspace whose '
+          + 'Resource declares a local_path, or record the outcome with verification_record instead',
+        ],
+      },
+    });
+  }
+
+  /**
+   * Executes a declared verification command and classifies the outcome. Called from `execute()`
+   * BEFORE the write transaction opens, so a slow command never holds the database lock.
+   */
+  private runVerificationCommand(input: VerificationRunInput): VerificationCommandOutcome | undefined {
+    if (input.method !== 'command') return undefined; // rejected inside the transaction, uniformly
+    // Validate the target FIRST, in the same order the mutation does. Hoisting execution out of
+    // the transaction must not reorder the errors a caller sees: a cross-Initiative criterion has
+    // to be rejected as such, not as a missing working directory. These are reads, so they need no
+    // write lock.
+    this.requireVerificationTarget(input.initiative_id, input.acceptance_criterion_id);
+    const cwd = this.resolveVerificationRunCwd(input.initiative_id);
+    const [program, ...args] = parseVerificationCommand(input.command);
+    if (!program) {
+      throw new InvalidRequestError({ field_errors: { command: ['command must name a program to run'] } });
+    }
+    const result = spawnSync(program, args, {
+      cwd,
+      shell: false,
+      // A verification command is an arbitrary console program. Without this, running one on
+      // Windows pops a console window per criterion.
+      windowsHide: true,
+      encoding: 'utf8',
+      timeout: VERIFICATION_RUN_TIMEOUT_MS,
+      maxBuffer: VERIFICATION_RUN_MAX_BUFFER_BYTES,
+    });
+    if (result.error) {
+      return { state: 'blocked', detail: truncateVerificationDetail(`command could not be executed: ${result.error.message}`) };
+    }
+    if (result.signal) {
+      return {
+        state: 'blocked',
+        detail: truncateVerificationDetail(`command terminated by signal ${result.signal}\n${combineCommandOutput(result.stdout, result.stderr)}`),
+      };
+    }
+    const exitCode = result.status ?? 0;
+    return {
+      state: exitCode === 0 ? 'pass' : 'fail',
+      detail: truncateVerificationDetail(`exit ${exitCode}\n${combineCommandOutput(result.stdout, result.stderr)}`),
+    };
+  }
+
+  private mutateVerificationRun(
+    input: VerificationRunInput,
+    expectedRevision: number,
+    provenance: ProvenanceInput,
+    /** Outcome of the command, already executed OUTSIDE the write transaction (audit M1-3). */
+    preRun: VerificationCommandOutcome | undefined,
+  ): VerificationRun {
+    this.requireCreateRevision(expectedRevision, 'VerificationRun');
+    const { initiativeId, acceptanceCriterionId } = this.requireVerificationTarget(
+      input.initiative_id,
+      input.acceptance_criterion_id,
+    );
+    if (input.method !== 'command') {
+      throw new VerificationMethodNotRunnableError({ method: input.method });
+    }
+
+    // CONFINEMENT (audit M1-1). This is the only place the engine itself executes a command, and
+    // it is reachable by anything holding the loopback token — including a worker that is itself
+    // sandboxed. Run unconfined, it would be a sandbox ESCAPE: a worker confined to its own cwd
+    // could ask the daemon to run anything, anywhere the daemon can reach. Two rules close that:
+    //
+    //   1. The command runs INSIDE the Initiative's own workspace, never the daemon's cwd. If no
+    //      linked workspace resource declares a local path, there is no confinement to run within
+    //      and the run is refused rather than silently widened.
+    //   2. No shell. `shell: true` makes the request body a shell program — metacharacters,
+    //      substitution, chaining. The argv form executes exactly one declared program.
+    // Already executed before the transaction opened (audit M1-3). `execute()` computes this for
+    // every `verification_run`, so its absence means the operation was dispatched from somewhere
+    // that skipped that step — a programming error, not a caller error.
+    if (!preRun) {
+      throw new Error('verification_run reached the store without a pre-executed command outcome');
+    }
+    const { state, detail } = preRun;
+
+    return this.insertVerificationRun({
+      initiativeId,
+      acceptanceCriterionId,
+      method: input.method,
+      state,
+      detail,
+      eventType: 'verification_run_executed',
+      provenance,
+    });
   }
 
   private mutateRiskAdd(input: RiskAddInput, expectedRevision: number, provenance: ProvenanceInput): Risk {
@@ -3620,19 +4030,35 @@ export class InitiativeRecordStore implements InitiativeRepository {
    * request's own (already-validated) assertions count toward its own snapshot (SPEC-004
    * "Data model" — "computed AFTER counting the current request's asserted keys as valid").
    */
+  /**
+   * The Initiative-wide inputs every gate evaluation needs. Read once and shared across a whole
+   * six-phase sweep (audit M1-11): the gate for `discover` and the gate for `deliver` are computed
+   * from exactly the same Requirements, Acceptance Criteria, Decisions, Events and Deliverables —
+   * only the contract's phase entry differs — so reading them per phase re-read the entire record
+   * six times for one `initiative_resume`.
+   */
+  private readGateInputs(initiativeId: string): GateInputs {
+    return {
+      requirements: this.listRequirements({ initiative_id: initiativeId }),
+      acceptanceCriteria: this.listAcceptanceCriteria({ initiative_id: initiativeId }),
+      decisions: this.listDecisions({ initiative_id: initiativeId }),
+      events: this.listEvents({ initiative_id: initiativeId }),
+      deliverableValidationStates: this.listDeliverables({ initiative_id: initiativeId }).map(
+        (deliverable) => deliverable.validation_state,
+      ),
+    };
+  }
+
   private evaluateGate(
     initiativeId: string,
     phase: Phase,
     contract: LifecycleContract | null,
     prospectiveSatisfyAsserted?: readonly string[],
+    /** Shared snapshot when sweeping several phases; read fresh when absent. */
+    sharedInputs?: GateInputs,
   ): GateStatus {
-    const requirements = this.listRequirements({ initiative_id: initiativeId });
-    const acceptanceCriteria = this.listAcceptanceCriteria({ initiative_id: initiativeId });
-    const decisions = this.listDecisions({ initiative_id: initiativeId });
-    const events = this.listEvents({ initiative_id: initiativeId });
-    const deliverableValidationStates = this.listDeliverables({ initiative_id: initiativeId }).map(
-      (deliverable) => deliverable.validation_state,
-    );
+    const { requirements, acceptanceCriteria, decisions, events, deliverableValidationStates } =
+      sharedInputs ?? this.readGateInputs(initiativeId);
     const effectiveEvents =
       prospectiveSatisfyAsserted !== undefined
         ? [...events, this.buildProspectiveSatisfiedEvent(initiativeId, phase, prospectiveSatisfyAsserted)]
@@ -3688,7 +4114,7 @@ export class InitiativeRecordStore implements InitiativeRepository {
       });
     }
     this.upsertPhaseRecord(row.uuid, input.phase, 'active');
-    this.bumpInitiativeRevision(row, provenance.timestamp);
+    const revision = this.bumpInitiativeRevision(row, provenance.timestamp);
     this.writeEvent({
       entity_type: 'Initiative',
       entity_id: row.uuid,
@@ -3697,7 +4123,7 @@ export class InitiativeRecordStore implements InitiativeRepository {
       payload: { phase: input.phase, previous_state: previousState, new_state: 'active' },
       provenance,
     });
-    return { initiative_id: row.uuid, phase: input.phase, state: 'active' };
+    return { initiative_id: row.uuid, phase: input.phase, state: 'active', revision };
   }
 
   /**
@@ -3727,7 +4153,7 @@ export class InitiativeRecordStore implements InitiativeRepository {
     this.validateAssertedKeys(asserted, contract, input.phase);
     const gateSnapshot = this.evaluateGate(row.uuid, input.phase, contract, asserted);
     this.upsertPhaseRecord(row.uuid, input.phase, 'satisfied');
-    this.bumpInitiativeRevision(row, provenance.timestamp);
+    const revision = this.bumpInitiativeRevision(row, provenance.timestamp);
     this.writeEvent({
       entity_type: 'Initiative',
       entity_id: row.uuid,
@@ -3742,7 +4168,7 @@ export class InitiativeRecordStore implements InitiativeRepository {
       },
       provenance,
     });
-    return { initiative_id: row.uuid, phase: input.phase, state: 'satisfied' };
+    return { initiative_id: row.uuid, phase: input.phase, state: 'satisfied', revision };
   }
 
   /**
@@ -3766,7 +4192,7 @@ export class InitiativeRecordStore implements InitiativeRepository {
       });
     }
     this.upsertPhaseRecord(row.uuid, input.phase, 'reopened');
-    this.bumpInitiativeRevision(row, provenance.timestamp);
+    const revision = this.bumpInitiativeRevision(row, provenance.timestamp);
     this.writeEvent({
       entity_type: 'Initiative',
       entity_id: row.uuid,
@@ -3775,7 +4201,7 @@ export class InitiativeRecordStore implements InitiativeRepository {
       payload: { phase: input.phase, previous_state: previousState, new_state: 'reopened', reason: input.reason },
       provenance,
     });
-    return { initiative_id: row.uuid, phase: input.phase, state: 'reopened' };
+    return { initiative_id: row.uuid, phase: input.phase, state: 'reopened', revision };
   }
 
   /**
@@ -3799,7 +4225,7 @@ export class InitiativeRecordStore implements InitiativeRepository {
       });
     }
     this.upsertPhaseRecord(row.uuid, input.phase, 'skipped');
-    this.bumpInitiativeRevision(row, provenance.timestamp);
+    const revision = this.bumpInitiativeRevision(row, provenance.timestamp);
     this.writeEvent({
       entity_type: 'Initiative',
       entity_id: row.uuid,
@@ -3808,7 +4234,7 @@ export class InitiativeRecordStore implements InitiativeRepository {
       payload: { phase: input.phase, previous_state: previousState, new_state: 'skipped', reason: input.reason },
       provenance,
     });
-    return { initiative_id: row.uuid, phase: input.phase, state: 'skipped' };
+    return { initiative_id: row.uuid, phase: input.phase, state: 'skipped', revision };
   }
 
   /**
@@ -3915,12 +4341,15 @@ export class InitiativeRecordStore implements InitiativeRepository {
     }
     const phaseStates = this.getPhaseStates(row.uuid);
     const contract = row.lifecycle_contract ? this.getLifecycleContractOrThrow(row.lifecycle_contract) : null;
+    // One read of the Initiative-wide inputs for the whole six-phase sweep, and the Event log is
+    // reused for the lifecycle-event tail below rather than fetched a second time (audit M1-11).
+    const gateInputs = this.readGateInputs(row.uuid);
     const phases = LIFECYCLE_PHASES.map((phase) => ({
       phase,
       state: phaseStates[phase],
-      gate: this.evaluateGate(row.uuid, phase, contract),
+      gate: this.evaluateGate(row.uuid, phase, contract, undefined, gateInputs),
     }));
-    const lifecycleEvents = this.listEvents({ initiative_id: row.uuid }).filter((event) =>
+    const lifecycleEvents = gateInputs.events.filter((event) =>
       InitiativeRecordStore.LIFECYCLE_EVENT_TYPES.has(event.event_type),
     );
     const recentLifecycleEvents = [...lifecycleEvents]
@@ -3932,6 +4361,427 @@ export class InitiativeRecordStore implements InitiativeRepository {
       phases,
       recent_lifecycle_events: recentLifecycleEvents,
     };
+  }
+
+  /** Raises a `counters` row to at least `minValue` (creating it at `minValue` if absent), never lowering an existing higher value. Used by `initiative_import` so a subsequent human-key allocation on an imported Initiative/Requirement/etc. cannot collide with an imported number. */
+  private raiseCounterFloor(counterName: string, minValue: number): void {
+    this.db
+      .prepare(
+        `INSERT INTO counters (name, value) VALUES (?, ?)
+         ON CONFLICT(name) DO UPDATE SET value = MAX(value, excluded.value)`,
+      )
+      .run(counterName, minValue);
+  }
+
+  /** Extracts the trailing `<n>` from a `<prefix>-<n>` human key (e.g. `MMA-INIT-005` -> `5`, `REQ-12` -> `12`). `0` for a malformed key — never lowers a counter below its current value. */
+  private parseHumanKeyNumber(humanKey: string): number {
+    const match = /-(\d+)$/.exec(humanKey);
+    return match ? Number(match[1]) : 0;
+  }
+
+  /**
+   * Ensures a wire-valid import snapshot is also a portable snapshot of exactly ONE Initiative.
+   * Zod can validate UUID syntax and each individual row shape, but cannot express the ownership
+   * graph between sibling arrays. Without this check a row such as an Artifact carrying another
+   * Initiative's UUID could be inserted successfully, then disappear from the next export (which
+   * correctly scopes its query to the imported Initiative). Reject before the first write so this
+   * remains a validation-shaped, all-or-nothing failure rather than latent data loss.
+   */
+  private validateInitiativeImportSnapshot(snapshot: InitiativeExportSnapshotInput): void {
+    const initiativeId = snapshot.initiative.uuid;
+    const invalid = (field: string, message: string): never => {
+      throw new InvalidRequestError({
+        field_errors: { [field]: [message] },
+        message: `invalid_request: invalid Initiative export snapshot: ${message}`,
+      });
+    };
+    const requireInitiativeOwnership = <T extends { initiative_id: string }>(entries: T[], field: string): void => {
+      for (const [index, entry] of entries.entries()) {
+        if (entry.initiative_id !== initiativeId) {
+          invalid(`${field}.${index}.initiative_id`, `must equal snapshot.initiative.uuid (${initiativeId})`);
+        }
+      }
+    };
+
+    if (snapshot.product.uuid !== snapshot.initiative.product_id) {
+      invalid('product.uuid', `must equal snapshot.initiative.product_id (${snapshot.initiative.product_id})`);
+    }
+
+    for (const [index, entry] of snapshot.workspaces.entries()) {
+      if (entry.link.initiative_id !== initiativeId) {
+        invalid(`workspaces.${index}.link.initiative_id`, `must equal snapshot.initiative.uuid (${initiativeId})`);
+      }
+      if (entry.workspace.product_id !== snapshot.product.uuid) {
+        invalid(`workspaces.${index}.workspace.product_id`, `must equal snapshot.product.uuid (${snapshot.product.uuid})`);
+      }
+      for (const [resourceIndex, resource] of entry.resources.entries()) {
+        if (resource.workspace_id !== entry.workspace.uuid) {
+          invalid(
+            `workspaces.${index}.resources.${resourceIndex}.workspace_id`,
+            `must equal its containing Workspace uuid (${entry.workspace.uuid})`,
+          );
+        }
+      }
+    }
+
+    requireInitiativeOwnership(snapshot.tasks, 'tasks');
+    requireInitiativeOwnership(snapshot.artifacts, 'artifacts');
+    requireInitiativeOwnership(snapshot.requirements, 'requirements');
+    requireInitiativeOwnership(snapshot.decisions, 'decisions');
+    requireInitiativeOwnership(snapshot.evidence, 'evidence');
+    requireInitiativeOwnership(snapshot.risks, 'risks');
+    requireInitiativeOwnership(snapshot.verification_runs, 'verification_runs');
+
+    const requirementIds = new Set(snapshot.requirements.map((requirement) => requirement.uuid));
+    for (const [index, criterion] of snapshot.acceptance_criteria.entries()) {
+      if (!requirementIds.has(criterion.requirement_id)) {
+        invalid(
+          `acceptance_criteria.${index}.requirement_id`,
+          `references Requirement ${criterion.requirement_id}, which is absent from snapshot.requirements`,
+        );
+      }
+    }
+    const criterionIds = new Set(snapshot.acceptance_criteria.map((criterion) => criterion.uuid));
+    for (const [index, run] of snapshot.verification_runs.entries()) {
+      if (!criterionIds.has(run.acceptance_criterion_id)) {
+        invalid(
+          `verification_runs.${index}.acceptance_criterion_id`,
+          `references Acceptance Criterion ${run.acceptance_criterion_id}, which is absent from snapshot.acceptance_criteria`,
+        );
+      }
+    }
+
+    const artifactIds = new Set(snapshot.artifacts.map((artifact) => artifact.uuid));
+    for (const [index, bundle] of snapshot.deliverables.entries()) {
+      if (bundle.deliverable.initiative_id !== initiativeId) {
+        invalid(`deliverables.${index}.deliverable.initiative_id`, `must equal snapshot.initiative.uuid (${initiativeId})`);
+      }
+      for (const [memberIndex, member] of bundle.members.entries()) {
+        if (member.deliverable_id !== bundle.deliverable.uuid) {
+          invalid(
+            `deliverables.${index}.members.${memberIndex}.deliverable_id`,
+            `must equal its containing Deliverable uuid (${bundle.deliverable.uuid})`,
+          );
+        }
+        if (!artifactIds.has(member.artifact_id)) {
+          invalid(
+            `deliverables.${index}.members.${memberIndex}.artifact_id`,
+            `references Artifact ${member.artifact_id}, which is absent from snapshot.artifacts`,
+          );
+        }
+      }
+      for (const [historyIndex, history] of bundle.history.entries()) {
+        if (history.deliverable_id !== bundle.deliverable.uuid) {
+          invalid(
+            `deliverables.${index}.history.${historyIndex}.deliverable_id`,
+            `must equal its containing Deliverable uuid (${bundle.deliverable.uuid})`,
+          );
+        }
+      }
+    }
+
+    for (const [index, event] of snapshot.events.entries()) {
+      if (event.initiative_id !== initiativeId) {
+        invalid(`events.${index}.initiative_id`, `must equal snapshot.initiative.uuid (${initiativeId})`);
+      }
+    }
+  }
+
+  /**
+   * `initiative_import` (MMA Next gap-closure, §21 success criterion 12: "an Initiative can be
+   * exported to a portable snapshot and re-imported"). Reconstructs one Initiative and every
+   * record `initiative_export` names into THIS store, in the SAME one-transaction envelope
+   * `execute()` already opens (BEGIN IMMEDIATE / COMMIT / ROLLBACK) — no nested transaction, no
+   * partial write on any failure below.
+   *
+   * Rejects a snapshot whose `schema_version` this build does not understand, and rejects an
+   * Initiative that already exists (by `uuid` OR `human_key`) with the conflict-shaped
+   * `initiative_already_exists` error — import never silently merges. Every record is inserted
+   * with its EXACT original identity (`uuid`, timestamps, `revision`) rather than replayed
+   * through the ordinary create mutations, so a round trip (export -> fresh store -> import ->
+   * export) reproduces equivalent content. Product/Workspace/Resource rows use `INSERT OR
+   * IGNORE`, because those are NOT Initiative-owned — a caller may import a second Initiative
+   * that shares an already-imported Product or Workspace. Every human-key counter the imported
+   * data could collide with is raised to at least the imported number, so a later
+   * `requirement_add`/`decision_record`/etc. against the imported Initiative cannot mint a
+   * duplicate human key.
+   */
+  private mutateInitiativeImport(
+    input: InitiativeImportInput,
+    expectedRevision: number,
+    provenance: ProvenanceInput,
+  ): Initiative {
+    this.requireCreateRevision(expectedRevision, 'Initiative');
+    const snapshot: InitiativeExportSnapshotInput = input.snapshot;
+    if (snapshot.schema_version !== INITIATIVE_EXPORT_SCHEMA_VERSION) {
+      throw new InvalidRequestError({
+        field_errors: {
+          schema_version: [
+            `unsupported snapshot schema_version ${snapshot.schema_version}; this build understands schema_version ${INITIATIVE_EXPORT_SCHEMA_VERSION}`,
+          ],
+        },
+        message: `invalid_request: unsupported Initiative export schema_version ${snapshot.schema_version}`,
+      });
+    }
+    this.validateInitiativeImportSnapshot(snapshot);
+    const existing = this.db
+      .prepare(`SELECT 1 FROM initiatives WHERE uuid = ? OR human_key = ? LIMIT 1`)
+      .get(snapshot.initiative.uuid, snapshot.initiative.human_key) as Record<string, unknown> | undefined;
+    if (existing) {
+      throw new InitiativeAlreadyExistsError({ uuid: snapshot.initiative.uuid, human_key: snapshot.initiative.human_key });
+    }
+
+    const product = snapshot.product;
+    this.db
+      .prepare(`INSERT OR IGNORE INTO products (uuid, name, slug, created_at, updated_at, revision) VALUES (?, ?, ?, ?, ?, ?)`)
+      .run(product.uuid, product.name, product.slug, product.createdAt, product.updatedAt, product.revision);
+
+    for (const entry of snapshot.workspaces) {
+      const ws = entry.workspace;
+      this.db
+        .prepare(
+          `INSERT OR IGNORE INTO workspaces (uuid, product_id, name, slug, description, created_at, updated_at, revision) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+        )
+        .run(ws.uuid, ws.product_id, ws.name, ws.slug, ws.description, ws.createdAt, ws.updatedAt, ws.revision);
+      for (const resource of entry.resources) {
+        this.db
+          .prepare(
+            `INSERT OR IGNORE INTO resources (uuid, workspace_id, type, canonical_locator, local_path, description, created_at, updated_at, revision) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          )
+          .run(
+            resource.uuid,
+            resource.workspace_id,
+            resource.type,
+            resource.canonical_locator,
+            resource.local_path,
+            resource.description,
+            resource.createdAt,
+            resource.updatedAt,
+            resource.revision,
+          );
+      }
+    }
+
+    const initiative = snapshot.initiative;
+    this.db
+      .prepare(
+        `INSERT INTO initiatives (uuid, human_key, product_id, title, goal, status, outcome, created_at, updated_at, revision, focus_phase, lifecycle_contract) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      )
+      .run(
+        initiative.uuid,
+        initiative.human_key,
+        initiative.product_id,
+        initiative.title,
+        initiative.goal,
+        initiative.status,
+        initiative.outcome,
+        initiative.createdAt,
+        initiative.updatedAt,
+        initiative.revision,
+        initiative.focus_phase,
+        initiative.lifecycle_contract,
+      );
+    this.raiseCounterFloor('initiative_human_key', this.parseHumanKeyNumber(initiative.human_key));
+
+    for (const entry of snapshot.workspaces) {
+      this.db
+        .prepare(`INSERT INTO initiative_workspace_links (initiative_id, workspace_id, role, created_at, revision) VALUES (?, ?, ?, ?, ?)`)
+        .run(entry.link.initiative_id, entry.link.workspace_id, entry.link.role, entry.link.createdAt, entry.link.revision);
+    }
+
+    for (const task of snapshot.tasks) {
+      this.db
+        .prepare(
+          `INSERT INTO tasks (uuid, initiative_id, title, goal, status, outcome, workspace_ids, resource_ids, execution_refs, created_at, updated_at, revision, claimed_by, method) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        )
+        .run(
+          task.uuid,
+          task.initiative_id,
+          task.title,
+          task.goal,
+          task.status,
+          task.outcome,
+          JSON.stringify(task.workspace_ids),
+          JSON.stringify(task.resource_ids),
+          JSON.stringify(task.executionRefs),
+          task.createdAt,
+          task.updatedAt,
+          task.revision,
+          task.claimed_by,
+          task.method,
+        );
+    }
+
+    for (const artifact of snapshot.artifacts) {
+      this.db
+        .prepare(
+          `INSERT INTO artifact_refs (uuid, initiative_id, storage_mode, path_or_uri, content_hash, media_type, version, produced_by_task, description, created_at, updated_at, revision) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        )
+        .run(
+          artifact.uuid,
+          artifact.initiative_id,
+          artifact.storage_mode,
+          artifact.path_or_uri,
+          artifact.content_hash,
+          artifact.media_type,
+          artifact.version,
+          artifact.produced_by_task,
+          artifact.description,
+          artifact.createdAt,
+          artifact.updatedAt,
+          artifact.revision,
+        );
+    }
+
+    for (const requirement of snapshot.requirements) {
+      this.db
+        .prepare(
+          `INSERT INTO requirements (uuid, initiative_id, human_key, statement, created_at, updated_at, revision) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+        )
+        .run(
+          requirement.uuid,
+          requirement.initiative_id,
+          requirement.human_key,
+          requirement.statement,
+          requirement.createdAt,
+          requirement.updatedAt,
+          requirement.revision,
+        );
+      this.raiseCounterFloor(`requirement_human_key:${requirement.initiative_id}`, this.parseHumanKeyNumber(requirement.human_key));
+    }
+
+    for (const criterion of snapshot.acceptance_criteria) {
+      this.db
+        .prepare(
+          `INSERT INTO acceptance_criteria (uuid, requirement_id, human_key, statement, check_reference, created_at, updated_at, revision) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+        )
+        .run(
+          criterion.uuid,
+          criterion.requirement_id,
+          criterion.human_key,
+          criterion.statement,
+          criterion.check_reference,
+          criterion.createdAt,
+          criterion.updatedAt,
+          criterion.revision,
+        );
+      this.raiseCounterFloor(
+        `acceptance_criterion_human_key:${criterion.requirement_id}`,
+        this.parseHumanKeyNumber(criterion.human_key),
+      );
+    }
+
+    for (const decision of snapshot.decisions) {
+      this.db
+        .prepare(
+          `INSERT INTO decisions (uuid, initiative_id, human_key, title, decision, rationale, alternatives, status, superseded_by, created_at, updated_at, revision) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        )
+        .run(
+          decision.uuid,
+          decision.initiative_id,
+          decision.human_key,
+          decision.title,
+          decision.decision,
+          decision.rationale,
+          JSON.stringify(decision.alternatives),
+          decision.status,
+          decision.superseded_by,
+          decision.createdAt,
+          decision.updatedAt,
+          decision.revision,
+        );
+      this.raiseCounterFloor(`decision_human_key:${decision.initiative_id}`, this.parseHumanKeyNumber(decision.human_key));
+    }
+
+    for (const item of snapshot.evidence) {
+      this.db
+        .prepare(
+          `INSERT INTO evidence (uuid, initiative_id, kind, locator, content_hash, summary, created_at, updated_at, revision) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        )
+        .run(item.uuid, item.initiative_id, item.kind, item.locator, item.content_hash, item.summary, item.createdAt, item.updatedAt, item.revision);
+    }
+
+    for (const risk of snapshot.risks) {
+      this.db
+        .prepare(
+          `INSERT INTO risks (uuid, initiative_id, human_key, statement, severity, status, created_at, updated_at, revision) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        )
+        .run(risk.uuid, risk.initiative_id, risk.human_key, risk.statement, risk.severity, risk.status, risk.createdAt, risk.updatedAt, risk.revision);
+      this.raiseCounterFloor(`risk_human_key:${risk.initiative_id}`, this.parseHumanKeyNumber(risk.human_key));
+    }
+
+    for (const run of snapshot.verification_runs) {
+      this.db
+        .prepare(
+          `INSERT INTO verification_runs (uuid, initiative_id, acceptance_criterion_id, method, state, detail, created_at, revision) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+        )
+        .run(run.uuid, run.initiative_id, run.acceptance_criterion_id, run.method, run.state, run.detail, run.createdAt, run.revision);
+    }
+
+    for (const phaseRecord of snapshot.phase_records) {
+      this.upsertPhaseRecord(initiative.uuid, phaseRecord.phase, phaseRecord.state);
+    }
+
+    for (const bundle of snapshot.deliverables) {
+      const deliverable = bundle.deliverable;
+      this.db
+        .prepare(
+          `INSERT INTO deliverables (uuid, initiative_id, target_type, delivery_contract, validation_state, validation_detail, delivery_reference, created_at, updated_at, revision) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        )
+        .run(
+          deliverable.uuid,
+          deliverable.initiative_id,
+          deliverable.target_type,
+          deliverable.delivery_contract,
+          deliverable.validation_state,
+          deliverable.validation_detail,
+          deliverable.delivery_reference,
+          deliverable.createdAt,
+          deliverable.updatedAt,
+          deliverable.revision,
+        );
+      for (const member of bundle.members) {
+        this.db
+          .prepare(`INSERT INTO deliverable_artifacts (deliverable_id, artifact_id, requirement, created_at) VALUES (?, ?, ?, ?)`)
+          .run(member.deliverable_id, member.artifact_id, member.requirement, member.createdAt);
+      }
+      for (const history of bundle.history) {
+        this.db
+          .prepare(
+            `INSERT INTO deliverable_delivery_history (uuid, deliverable_id, delivery_reference, validation_state, created_at) VALUES (?, ?, ?, ?, ?)`,
+          )
+          .run(history.uuid, history.deliverable_id, history.delivery_reference, history.validation_state, history.createdAt);
+      }
+    }
+
+    // Replay every snapshot Event with its ORIGINAL content (entity, type, payload, and full
+    // caller provenance — never this mutation's OWN `provenance`), in original relative order.
+    // `writeEvent` allocates a fresh `event_sequence` per call (MAX(event_sequence)+1), so a
+    // truly fresh target store reproduces the exact original sequence numbers; a non-empty
+    // target store still preserves relative order without colliding with unrelated rows.
+    for (const event of snapshot.events) {
+      this.writeEvent({
+        entity_type: event.entity_type as Event['entity_type'],
+        entity_id: event.entity_id,
+        initiative_id: event.initiative_id,
+        event_type: event.event_type,
+        payload: event.payload,
+        provenance: {
+          actor_type: event.actor_type,
+          actor_id: event.actor_id,
+          interface: event.interface,
+          initiated_by: event.initiated_by,
+          authorized_by: event.authorized_by,
+          timestamp: event.timestamp,
+          source: event.source,
+        },
+      });
+    }
+
+    void provenance; // the caller's own provenance identifies the IMPORT act; every reconstructed
+    // record and replayed Event above intentionally carries its ORIGINAL snapshot provenance
+    // instead, so the imported history reads exactly as it did in the source store.
+    return initiative;
   }
 
   /** Closes the store's own `DatabaseSync` connection. Idempotent. */

@@ -55,6 +55,12 @@ export async function handleRequest(
   let rawBody: Buffer | undefined;
   if (BODY_METHODS.has(method)) {
     const result = await readBody(req, cfg.server.limits.maxBodyBytes);
+    if (!result.ok && result.reason === 'read_error') {
+      // The body never arrived intact. Answering 413 here would assert a size violation that did
+      // not happen; the write is best-effort because the socket may already be gone.
+      sendError(res, 400, 'invalid_request', 'Request body could not be read');
+      return;
+    }
     if (!result.ok) {
       res.writeHead(413, { 'content-type': 'application/json', 'connection': 'close' });
       res.end(
@@ -105,6 +111,13 @@ export async function handleRequest(
     const header = req.headers['authorization'];
     const authResult = validateAuthHeader(header, token);
     if (!authResult.ok) {
+      // The RESPONSE stays generic — a client must not learn which check failed. The reason goes
+      // to the daemon's own stderr, where it is the difference between three very different
+      // operator problems: `missing` (no header — the client never got configured), `malformed`
+      // (a header that is not `Bearer <token>`), and `mismatch` (a stale or wrong token, e.g. an
+      // `MMA_AUTH_TOKEN` env override disagreeing with the token file). `validateAuthHeader` has
+      // always computed this and nothing has ever read it.
+      process.stderr.write(`[mma] auth_rejected ${method} ${pathname} reason=${authResult.reason}\n`);
       sendError(res, 401, 'unauthorized', 'Valid Bearer token required');
       return;
     }

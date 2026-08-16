@@ -19,7 +19,10 @@ export class EnvelopeBus {
     return () => this.unsubscribe(s);
   }
 
-  unsubscribe(s: Subscriber): void {
+  /** Private: `subscribe` hands back the closure that calls this, and that closure is the
+   *  whole detach API. A second public way to remove a subscriber had no caller anywhere —
+   *  including in this repo's own tests — and left the class with two ways to do one thing. */
+  private unsubscribe(s: Subscriber): void {
     const i = this.subs.indexOf(s);
     if (i !== -1) this.subs.splice(i, 1);
   }

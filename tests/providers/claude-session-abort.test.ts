@@ -73,9 +73,19 @@ describe('ClaudeSession — caller cancellation', () => {
     expect(result.errorCode).toBe('aborted');
   });
 
-  it('cancellation outranks the deadline when both fire', async () => {
+  /**
+   * An already-aborted signal wins even with a deadline configured — but note what this does
+   * NOT test. The abort is checked synchronously inside `send()`, so the query closes and the
+   * iterator finishes in the first microtask turn, long before any timer runs: `timedOut` stays
+   * false and the precedence branch is never evaluated. Under its previous name,
+   * "cancellation outranks the deadline when both fire", it asserted the abort path a second
+   * time and stayed green when the precedence was flipped.
+   *
+   * The real tie-break — both guards actually fired — needs a mock that can hold the turn open
+   * across the two, and lives in `claude-session-guard-precedence.test.ts`.
+   */
+  it('honours an already-aborted signal even when a deadline is also configured', async () => {
     const ac = new AbortController();
-    // 20ms deadline AND an abort — the caller's intent is the actionable reason.
     const session = makeSession(ac.signal, 20);
     ac.abort();
 

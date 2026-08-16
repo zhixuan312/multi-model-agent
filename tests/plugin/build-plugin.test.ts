@@ -3,15 +3,33 @@
 // The committed `plugin/` directory is GENERATED from the packaged skills, so
 // the highest-value assertions are (a) it never carries a secret, and (b) the
 // committed copy has not drifted from what the generator produces today.
-import { mkdtempSync, rmSync, readFileSync, existsSync, statSync, writeFileSync, mkdirSync } from 'node:fs';
+import { mkdtempSync, readdirSync, rmSync, readFileSync, existsSync, statSync, writeFileSync, mkdirSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join, relative, resolve } from 'node:path';
+import { dirname, join, relative, resolve } from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { buildPlugin, PLUGIN_NAME, MCP_SERVER_KEY, pluginComponentName, rewriteSkillReferences } from '../../packages/server/src/plugin/build-plugin.js';
 import { SUPPORTED_SKILLS, SUPPORTED_COMMANDS } from '../../packages/server/src/skill-install/discover.js';
+import { MCP_TOOLS } from '../../packages/server/src/mcp/tool-surface.js';
+import { serverConfigSchema } from '@zhixuan92/multi-model-agent-core';
 
-const SKILL_COMPONENTS = SUPPORTED_SKILLS.map(pluginComponentName);
-const COMMAND_COMPONENTS = SUPPORTED_COMMANDS.map(pluginComponentName);
+/**
+ * The expected component names, derived by an INDEPENDENT rule — not by the function under test.
+ *
+ * These were `SUPPORTED_SKILLS.map(pluginComponentName)`, which recomputes exactly what
+ * `buildPlugin` computes, with the same function, over the same input. `expect(r.skills).toEqual(
+ * SKILL_COMPONENTS)` therefore held for any naming change whatsoever — including one that broke
+ * every plugin invocation. The test ten lines below already says this out loud about its own
+ * command list ("computing the expectation with the same prefix-stripping under test would pass
+ * no matter what the builder does"); the constants above it did the thing it warns against.
+ *
+ * The rule, stated once here: strip a leading `mma-`, except the router, which is packaged under
+ * the product name and would otherwise invoke as `/mma:multi-model-agent`.
+ */
+const expectedComponent = (packagedName: string): string =>
+  packagedName === 'multi-model-agent' ? 'router' : packagedName.replace(/^mma-/, '');
+
+const SKILL_COMPONENTS = SUPPORTED_SKILLS.map(expectedComponent);
+const COMMAND_COMPONENTS = SUPPORTED_COMMANDS.map(expectedComponent);
 
 const REPO_ROOT = resolve(__dirname, '..', '..');
 
@@ -52,7 +70,7 @@ describe('buildPlugin', () => {
     // Literal, not derived from SUPPORTED_COMMANDS: computing the expectation
     // with the same prefix-stripping under test would pass no matter what the
     // builder does.
-    expect(r.commands).toEqual(['flow', 'breakout', 'tldr']);
+    expect(r.commands).toEqual(['flow', 'breakout', 'tldr', 'deck']);
     expect(r.skills.some((n) => n.startsWith('mma-'))).toBe(false);
     expect(existsSync(join(out, 'skills', 'mma-audit'))).toBe(false);
   });
@@ -148,6 +166,38 @@ describe('buildPlugin', () => {
     expect(JSON.parse(none)).toEqual({ 'X-MMA-Client': 'agent-plugin' });
   });
 
+  /**
+   * The third lookup — `~/.mma/auth-token` — is the one every real install uses, and it was the
+   * only one with no test. `MMA_AUTH_TOKEN` and `MMA_TOKEN_FILE` are opt-in; a user who runs
+   * `mma serve` and installs the plugin sets neither, so a wrong default filename here would
+   * break every plugin connection in the field while all three cases above stayed green.
+   *
+   * The expected path is read out of the config schema rather than restated, because that literal
+   * appears in seven places across the repo and the helper is the only one that is a SHELL string
+   * — nothing else would catch it drifting.
+   */
+  it('falls back to the daemon default token file when no env var is set', () => {
+    build();
+    const script = join(out, 'scripts', 'mma-mcp-headers.sh');
+
+    const defaultTokenFile = serverConfigSchema.parse({}).server.auth.tokenFile;
+    expect(defaultTokenFile.startsWith('~/'), 'default token file is no longer home-relative')
+      .toBe(true);
+
+    const home = mkdtempSync(join(tmpdir(), 'mma-home-'));
+    const tokenPath = join(home, defaultTokenFile.slice('~/'.length));
+    mkdirSync(dirname(tokenPath), { recursive: true });
+    writeFileSync(tokenPath, 'home-tok\n');
+
+    // Both env vars empty: the helper must find the token by the default path alone.
+    const out2 = execFileSync(script, {
+      encoding: 'utf8',
+      env: { ...process.env, HOME: home, MMA_AUTH_TOKEN: '', MMA_TOKEN_FILE: '' },
+    });
+    expect(JSON.parse(out2)).toEqual({ Authorization: 'Bearer home-tok', 'X-MMA-Client': 'agent-plugin' });
+    rmSync(home, { recursive: true, force: true });
+  });
+
   it('inlines @include directives', () => {
     build();
     for (const s of SKILL_COMPONENTS) {
@@ -189,6 +239,52 @@ describe('marketplace catalog', () => {
     expect(existsSync(resolve(REPO_ROOT, entry.source, '.claude-plugin', 'plugin.json'))).toBe(true);
   });
 
+  /**
+   * The version lockstep the drift guard structurally cannot check.
+   *
+   * That test seeds `buildPlugin({ version: committedVersion })` FROM the committed manifest, so
+   * it compares every other field at whatever version is already there — it is blind to the
+   * manifest disagreeing with `package.json`, and its own comment says so ("the version itself is
+   * held in lockstep by the release workflow"). Holding it only in the release workflow means the
+   * failure surfaces on release day: `release.yml` iterates all four locations and refuses to
+   * ship. That is a wasted dispatch for a one-command fix, and it happened — 6.10.0 bumped three
+   * manifests by hand and left `plugin/.claude-plugin/plugin.json` at 6.9.0, which is the same
+   * incident `scripts/set-version.mjs` was written after 5.16.1 to prevent.
+   *
+   * Checked here so it fails in the suite instead.
+   */
+  /**
+   * The marketplace blurb counts the rosters, and nothing regenerated or checked it.
+   *
+   * `marketplace.json` is the one plugin file no gate touches: `build:plugin` does not write it,
+   * and the drift guard diffs `plugin/`, which excludes it. It advertised "16 skills" after
+   * `mma-solution-lead` made 17 — the storefront description undercounting the product by one.
+   */
+  it('the marketplace description counts the real rosters', () => {
+    const catalog = readFileSync(resolve(REPO_ROOT, '.claude-plugin', 'marketplace.json'), 'utf8');
+    expect(catalog, `marketplace.json should say ${SUPPORTED_SKILLS.length} skills`)
+      .toContain(`${SUPPORTED_SKILLS.length} skills`);
+    expect(catalog, `marketplace.json should say ${SUPPORTED_COMMANDS.length} commands`)
+      .toContain(`${SUPPORTED_COMMANDS.length} commands`);
+  });
+
+  it('the committed plugin manifest is at the repo version', () => {
+    const repoVersion = JSON.parse(readFileSync(resolve(REPO_ROOT, 'package.json'), 'utf8')).version;
+    const committed = JSON.parse(
+      readFileSync(resolve(REPO_ROOT, 'plugin', '.claude-plugin', 'plugin.json'), 'utf8'),
+    ).version;
+    expect(committed, 'run `node scripts/set-version.mjs <version>` — it regenerates plugin/')
+      .toBe(repoVersion);
+  });
+
+  it('every workspace manifest is at the repo version', () => {
+    const repoVersion = JSON.parse(readFileSync(resolve(REPO_ROOT, 'package.json'), 'utf8')).version;
+    for (const manifest of ['packages/core/package.json', 'packages/server/package.json']) {
+      const version = JSON.parse(readFileSync(resolve(REPO_ROOT, manifest), 'utf8')).version;
+      expect(version, `${manifest} is at ${version}, repo is at ${repoVersion}`).toBe(repoVersion);
+    }
+  });
+
   it('the committed plugin/ has not drifted from the generator', () => {
     // Guards the release hazard: editing a skill without re-running
     // `npm run build:plugin` would publish a stale plugin to the marketplace.
@@ -213,6 +309,18 @@ describe('marketplace catalog', () => {
       }
       expect(readFileSync(join(committed, '.mcp.json'), 'utf8'))
         .toBe(readFileSync(join(fresh, '.mcp.json'), 'utf8'));
+
+      // Both loops above visit only the components the EXPECTED list names, so a skill
+      // RETIRED from `SUPPORTED_SKILLS` is never looked at. `build:plugin` deletes its
+      // directory on disk, but the deletion still has to be staged: forget that, and the
+      // committed tree keeps shipping a skill the engine no longer has a route for —
+      // silently, past every assertion in this test. Comparing the directory listings is
+      // what makes removal as guarded as modification.
+      const listing = (root: string, sub: string) => readdirSync(join(root, sub)).sort();
+      expect(listing(committed, 'skills'), 'plugin/skills has an entry the generator does not emit')
+        .toEqual(listing(fresh, 'skills'));
+      expect(listing(committed, 'commands'), 'plugin/commands has an entry the generator does not emit')
+        .toEqual(listing(fresh, 'commands'));
 
       // The generator emits three more files, and every one of them was
       // previously unguarded. The helper script matters most: it is the plugin's
@@ -348,12 +456,77 @@ describe('buildPlugin — agent-plugin target', () => {
     }
   });
 
+  /**
+   * Every emitted file, not three named ones.
+   *
+   * The scan used to cover `plugin.json`, `mcp.json` and `README.md` while the name promised the
+   * package. Skills were the gap — and skills are exactly where this went wrong before: the
+   * generator once took an `authToken` option that substituted the live token INTO skill text
+   * (see the note in build-plugin.ts). A regression there would have shipped a credential in a
+   * published package with this test green.
+   */
   it('carries no credential in any emitted file', () => {
     buildAp();
-    for (const f of ['plugin.json', 'mcp.json', 'README.md']) {
-      const text = readFileSync(join(out, f), 'utf8');
-      expect(text).not.toMatch(/Bearer\s+\S/);
-      expect(text).not.toMatch(/Authorization"\s*:\s*"[^$]/);
+
+    const walk = (dir: string): string[] =>
+      readdirSync(dir, { withFileTypes: true }).flatMap((e) =>
+        e.isDirectory() ? walk(join(dir, e.name)) : [join(dir, e.name)],
+      );
+    const files = walk(out);
+    expect(files.length, 'nothing was emitted — the scan would be vacuous').toBeGreaterThan(10);
+
+    for (const file of files) {
+      const text = readFileSync(file, 'utf8');
+      const where = relative(out, file);
+      // A `Bearer` followed by anything but a documented placeholder (`$VAR`, `${VAR}`,
+      // `<token>`) is a literal credential.
+      for (const [match] of text.matchAll(/Bearer\s+(\S+)/g)) {
+        expect(match, `${where} contains a literal bearer token`).toMatch(/Bearer\s+([$<`]|token\b)/);
+      }
+      expect(text, `${where} hard-codes an Authorization value`)
+        .not.toMatch(/"Authorization"\s*:\s*"[^$]/);
+    }
+  });
+});
+
+/**
+ * The README's "What it installs" section must describe what was installed.
+ *
+ * Its three bullets are three different constructions and only two were derived. The tool list
+ * comes from `MCP_TOOLS` with a comment explaining that a hand-maintained one "silently rots every
+ * time a specification adds operations". One line below that warning, the COMMANDS bullet had a
+ * computed count and a hardcoded pair of examples — so adding `/mma:tldr` and `/mma:deck` produced
+ * "**4 commands** — explicitly invoked (`/mma:flow`, `/mma:breakout`)": a list that contradicts the
+ * number beside it, with no `…` to mark it as a sample the way the skills bullet does.
+ */
+describe('plugin README describes the plugin it shipped with', () => {
+  let out: string;
+  let result: ReturnType<typeof buildPlugin>;
+  let readme: string;
+
+  beforeAll(() => {
+    out = mkdtempSync(join(tmpdir(), 'mma-plugin-readme-'));
+    result = buildPlugin({ outDir: out, version: '9.9.9', port: 7337 });
+    readme = readFileSync(join(out, 'README.md'), 'utf8');
+  });
+
+  afterAll(() => rmSync(out, { recursive: true, force: true }));
+
+  it('states the counts it actually emitted', () => {
+    expect(readme).toContain(`**${result.skills.length} skills**`);
+    expect(readme).toContain(`**${result.commands.length} commands**`);
+  });
+
+  it('names every command it emitted, not a sample of them', () => {
+    for (const command of result.commands) {
+      expect(readme, `README omits /mma:${command} while claiming ${result.commands.length} commands`)
+        .toContain(`\`/mma:${command}\``);
+    }
+  });
+
+  it('names every MCP tool it exposes', () => {
+    for (const tool of MCP_TOOLS) {
+      expect(readme, `README omits ${tool.name}`).toContain(`\`${tool.name}\``);
     }
   });
 });

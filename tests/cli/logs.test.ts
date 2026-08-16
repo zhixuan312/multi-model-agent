@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { mkdtempSync, writeFileSync, mkdirSync, rmSync, appendFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
-import { runLogs } from '../../packages/server/src/cli/logs.js';
+import { nextFollowTarget, runLogs } from '../../packages/server/src/cli/logs.js';
 import type { MultiModelConfig } from '@zhixuan92/multi-model-agent-core';
 
 function cap() {
@@ -15,12 +15,11 @@ function cap() {
   };
 }
 
-function mkConfig(logDir: string, enabled = true): MultiModelConfig {
-  return {
-    agents: {} as MultiModelConfig['agents'],
-    diagnostics: { log: enabled, logDir },
-    server: {} as MultiModelConfig['server'],
-  } as MultiModelConfig;
+// No casts: `runLogs` asks only for `diagnostics`, so that is all this builds. It used to fake an
+// empty `agents` and `server` and cast three times to satisfy a parameter type the function never
+// touched — which also meant a real change to either of those shapes could not be noticed here.
+function mkConfig(logDir: string, enabled = true): Pick<MultiModelConfig, 'diagnostics'> {
+  return { diagnostics: { log: enabled, logDir } };
 }
 
 function today(): string {
@@ -102,6 +101,45 @@ describe('mma logs', () => {
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }
+  });
+
+  describe('nextFollowTarget — what a --follow session reads next', () => {
+    it('switches to the new file when the log rotates at UTC midnight', () => {
+      // The writer moves to mma-<date>.jsonl at midnight. A session started yesterday used to keep
+      // tailing yesterday's file and go silent for the rest of the run, which to a user is
+      // indistinguishable from "nothing is happening".
+      const next = nextFollowTarget(
+        { path: '/logs/mma-2026-08-14.jsonl', offset: 4096 },
+        '/logs/mma-2026-08-15.jsonl',
+        true,
+        4096,
+      );
+      expect(next).toEqual({ path: '/logs/mma-2026-08-15.jsonl', offset: 0 });
+    });
+
+    it('stays put when the newly resolved file does not exist yet', () => {
+      // Just after midnight the new file may not have been created. Switching to a path that is
+      // not there would lose the lines still arriving in the old one.
+      const next = nextFollowTarget(
+        { path: '/logs/mma-2026-08-14.jsonl', offset: 4096 },
+        '/logs/mma-2026-08-15.jsonl',
+        false,
+        5000,
+      );
+      expect(next).toEqual({ path: '/logs/mma-2026-08-14.jsonl', offset: 4096 });
+    });
+
+    it('rewinds when the file was truncated under us', () => {
+      // size < offset means the file shrank. Without the rewind, `size <= offset` skipped every
+      // later poll and the tail never emitted another line.
+      const next = nextFollowTarget({ path: '/logs/a.jsonl', offset: 4096 }, '/logs/a.jsonl', true, 100);
+      expect(next).toEqual({ path: '/logs/a.jsonl', offset: 0 });
+    });
+
+    it('leaves a normally-growing file alone', () => {
+      const current = { path: '/logs/a.jsonl', offset: 4096 };
+      expect(nextFollowTarget(current, '/logs/a.jsonl', true, 8192)).toBe(current);
+    });
   });
 
   it('no log file + no --follow exits 0 with warning on stderr', async () => {

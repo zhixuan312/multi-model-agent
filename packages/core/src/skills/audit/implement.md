@@ -45,7 +45,7 @@ A finding that points at any of these failure-mode triggers is high-value EVEN I
 For each of the 11 failure modes:
 
 1. Read the document through the lens of ONLY that failure mode
-2. Record findings (use a scratch file at `/tmp/audit-findings.md` if your environment allows writes, otherwise keep notes in working memory)
+2. Record findings in working memory
 3. If no findings for that failure mode, note "Criterion N: No findings."
 4. Move to the next failure mode
 
@@ -54,7 +54,9 @@ After all 11 failure modes are complete, consolidate into the final JSON output.
 ### Execution Steps
 
 ### Step 1: Set up scratch notes
-Try writing to `/tmp/audit-findings.md`. If writes are blocked, proceed with in-memory notes — this does not affect the audit.
+Keep your per-criterion notes in working memory. Audit runs read-only — the engine denies every
+write tool and every mutating shell command, whatever the path — so there is no scratch file to
+write and nothing to fall back from.
 
 ### Step 2: Criterion 1 — RECOMMENDATION-COHERENCE
 Read the document. Does the proposed fix actually solve the stated problem given the doc's own stated constraints? A fix requiring X when the doc forbids X is logically incomplete. Always check fixes against any explicit principles, constraints, invariants, or "what we won't do" sections. Example: a doc listing "no persistence" as a principle cannot have a fix that disambiguates "id existed before" from "id never existed" without persistence. Record findings.

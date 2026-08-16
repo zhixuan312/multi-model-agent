@@ -4,6 +4,7 @@ import {
   type SourceGroup,
 } from './evidence-pack.js';
 import type { AdapterId, AdapterResult } from './adapters/types.js';
+import { CREDENTIAL_GATED_ADAPTERS } from './adapters/index.js';
 import type { BraveSearchResponse, BraveSearchOptions } from './web-search.js';
 
 export interface OrchestratorDeps {
@@ -65,18 +66,33 @@ function buildTasks(plan: QueryPlan): Task[] {
   return tasks;
 }
 
+/**
+ * Which adapter backs each task kind — `null` for Brave, which is not an adapter and is gated by
+ * its API keys instead. The task kinds are the plan's vocabulary (`ss`, `gh_repo`) and the
+ * adapter ids are the registry's (`semantic_scholar`, `github_search`), so the translation has to
+ * live somewhere; it lives here once, and both the enabled check and the skip-reason read it.
+ */
+const TASK_TO_ADAPTER: Record<Task['kind'], AdapterId | null> = {
+  brave:      null,
+  brave_news: null,
+  arxiv:      'arxiv',
+  ss:         'semantic_scholar',
+  gh_repo:    'github_search',
+  gh_code:    'github_search',
+  openalex:   'openalex',
+  crossref:   'crossref',
+  pubmed:     'pubmed',
+};
+
+/** True when this task's adapter is withheld for a MISSING CREDENTIAL rather than a config flag. */
+function adapterNeedsCredential(kind: Task['kind']): boolean {
+  const adapter = TASK_TO_ADAPTER[kind];
+  return adapter !== null && CREDENTIAL_GATED_ADAPTERS.has(adapter);
+}
+
 function isAdapterEnabled(kind: Task['kind'], enabled: AdapterId[]): boolean {
-  switch (kind) {
-    case 'brave':
-    case 'brave_news':     return true;
-    case 'arxiv':          return enabled.includes('arxiv');
-    case 'ss':             return enabled.includes('semantic_scholar');
-    case 'gh_repo':
-    case 'gh_code':        return enabled.includes('github_search');
-    case 'openalex':       return enabled.includes('openalex');
-    case 'crossref':       return enabled.includes('crossref');
-    case 'pubmed':         return enabled.includes('pubmed');
-  }
+  const adapter = TASK_TO_ADAPTER[kind];
+  return adapter === null || enabled.includes(adapter);
 }
 
 /** Per-adapter concurrency limits per spec (rate-limiting, timeouts, and error recovery). */
@@ -109,6 +125,18 @@ class Semaphore {
   }
 }
 
+/**
+ * Bound how long the ORCHESTRATOR waits — not how long the request runs.
+ *
+ * This is a promise race: it rejects the caller after `ms` and does nothing to `p`, which keeps
+ * running to completion or forever. That is fine because every adapter carries its own
+ * `AbortController` bounded by `RESEARCH_HTTP_TIMEOUT_MS`, so the request itself is cancelled
+ * there. It was NOT fine while three adapters shipped without one: this function ended the wait,
+ * the socket stayed open, and the leak was invisible precisely because the orchestrator reported
+ * a clean `timeout` failure.
+ *
+ * So: a new adapter needs its own signal. This cannot supply one.
+ */
 function withTimeout<T>(p: Promise<T>, ms: number): Promise<T> {
   return new Promise((resolve, reject) => {
     const t = setTimeout(() => reject(new Error('timeout')), ms);
@@ -123,10 +151,15 @@ async function runOne(
   semaphores: Map<Task['kind'], Semaphore>,
 ): Promise<void> {
   if (!isAdapterEnabled(task.kind, deps.enabledAdapters)) {
+    // Two different facts, and they used to share one string. An adapter is absent from
+    // `enabledAdapters` either because its credential is missing (only `semantic_scholar` works
+    // that way) or because the operator turned its config flag off. Reporting
+    // `no_api_key_configured` for the second case tells someone who disabled Crossref to go find
+    // a Crossref API key, which does not exist — the adapter is keyless.
     fails.push({
       source: TASK_TO_GROUP[task.kind],
       query:  task.query,
-      reason: 'no_api_key_configured',
+      reason: adapterNeedsCredential(task.kind) ? 'no_api_key_configured' : 'adapter_disabled',
     });
     return;
   }

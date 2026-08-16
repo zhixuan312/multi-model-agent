@@ -45,11 +45,15 @@ rewrite reads.
   full taxonomy.
 - Every finding must carry a precise location (`file:line`, or the equivalent locator for non-code
   material — a section name, a step number, a field path) plus quoted or extracted evidence; if you
-  cannot cite it, do not raise it.
+  cannot cite it, do not raise it. Put that locator in the finding's `file` field as text — a
+  section heading is a perfectly good `file` value — and OMIT `line` when the material has no line
+  numbering; it defaults to 0. Never invent a line number to satisfy the field, and never fabricate
+  a path: `file` is what a caller will try to open, so a made-up one is worse than a section name.
 - Scope is the named material plus cross-references on changed elements plus sibling verification
   artifacts — not speculation about unrelated material.
-- Pre-existing defects go in their own "Pre-existing — out of scope" section, never mixed into
-  release-blocking findings.
+- Pre-existing defects stay IN `findings` with `preExisting: true` — that flag is what separates
+  them from release-blocking work. There is no separate section: your output is one JSON block, so
+  a prose section is discarded and the defect is lost.
 - Severity is calibrated to release-safety impact, not aesthetics.
 
 ## Execution
@@ -70,9 +74,18 @@ area tells you which lens to weight, but every review must sweep the full taxono
    break.** This is the highest-value cross-material work for a review.
 
 3. **PRE-EXISTING-DEFECT-VS-NEW-REGRESSION** — A defect exists in the named material but the change did
-   not introduce it. Do NOT blame the change for prior defects; note them in a separate
-   "Pre-existing — out of scope" section. Conversely, if the change DID introduce or worsen a defect,
-   flag it as a regression. Clean separation is critical.
+   not introduce it.
+
+   **Establish the change-set first.** Nothing in the request carries a diff: the review input is
+   `prompt` + `target`, and the engine captures no baseline for a read route. Read-only git IS
+   available to you (`status`, `log`, `diff`, `show`), so on a git target run `git diff` — and
+   `git log -1` for context — to see what actually changed before classifying anything. If the
+   caller supplied a diff in the prompt or a context block, that is the change-set and you need not
+   derive one. If neither is available (a non-git target, or a clean tree), say so in your notes and
+   mark every finding `preExisting: false` only where the named material itself shows the defect;
+   do not guess at authorship. Do NOT blame the change for prior defects: report them with
+   `preExisting: true`. Conversely, if the change DID introduce or worsen a defect, report it with
+   `preExisting: false`. Clean separation is critical, and that boolean is where it lives.
 
 4. **MISSING EDGE CASE** — The change adds a path but does not handle an empty, missing, timed-out,
    erroring, zero, or negative input the path could see. Walk the change against each natural boundary
@@ -131,9 +144,9 @@ area tells you which lens to weight, but every review must sweep the full taxono
 - Out of scope: speculation about untouched material unrelated to the change; doc/spec issues that are
   not about this change (those belong in an audit, not a review); style nits when the focus area is
   security/correctness/performance.
-- Pre-existing defects belong in their own backlog item, not in this review. Note them in a
-  "Pre-existing — out of scope" section if you spot them, but DO NOT mix them into release-blocking
-  findings.
+- Pre-existing defects are not release-blocking, but report them: emit them as findings carrying
+  `preExisting: true`. Do NOT drop them and do NOT leave them indistinguishable from defects this
+  change introduced — the flag is the whole distinction.
 
 ### Severity Calibration
 
@@ -156,8 +169,7 @@ Before finishing, verify against this rubric:
 - Is severity calibrated to release-safety impact, not aesthetics?
 - Are cross-references on changed shared elements checked (searched for other references)?
 - Are sibling verification artifacts checked for coverage of the changed behavior?
-- Are pre-existing defects separated into their own section (not mixed into release-blocking
-  findings)?
+- Is every pre-existing defect flagged `preExisting: true` (and every regression `false`)?
 - Is the finding within scope (named material + cross-references on changed elements + sibling
   verification artifacts), or is it speculation about unrelated material?
 

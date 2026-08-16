@@ -14,7 +14,6 @@ import {
   taskInputSchema,
   initiativeOperationRequestSchema,
   initiativeMutationRequestSchema,
-  initiativeResumeRequestSchema,
   INITIATIVE_OPERATIONS,
   type InitiativeOperation,
 } from '@zhixuan92/multi-model-agent-core';
@@ -172,13 +171,17 @@ function initiativeToolName(operation: InitiativeOperation): string {
 }
 
 /** `mma_<operation>` (or the SPEC-005 `mma_initiative_<operation>` override) -> `<operation>`,
- *  for every operation EXCEPT the two dedicated reads with their own tool/handler —
- *  `initiative_resume` and `initiative_gate_status` (Task I-5, see below). Built from the frozen
- *  `INITIATIVE_OPERATIONS` list so a tool name can never name an operation `execute()` does not
- *  also recognise. */
+ *  for every operation EXCEPT the three dedicated reads with their own tool/handler —
+ *  `initiative_resume`, `initiative_gate_status` (Task I-5), and `initiative_export` (MMA Next
+ *  gap-closure, same "server-side assembly of joined reads, not a single store call" reason).
+ *  Built from the frozen `INITIATIVE_OPERATIONS` list so a tool name can never name an operation
+ *  `execute()` does not also recognise. */
 export const INITIATIVE_EXECUTE_OPERATION_BY_TOOL_NAME: ReadonlyMap<string, InitiativeOperation> = new Map(
   INITIATIVE_OPERATIONS
-    .filter((operation) => operation !== 'initiative_resume' && operation !== 'initiative_gate_status')
+    .filter(
+      (operation) =>
+        operation !== 'initiative_resume' && operation !== 'initiative_gate_status' && operation !== 'initiative_export',
+    )
     .map((operation) => [initiativeToolName(operation), operation] as const),
 );
 
@@ -220,12 +223,6 @@ function initiativeToolInputSchema(operation: InitiativeOperation): Record<strin
   }
   return { ...full, properties, required };
 }
-
-const initiativeResumeInputSchema: Record<string, unknown> = (() => {
-  const schema = z.toJSONSchema(initiativeResumeRequestSchema) as Record<string, unknown>;
-  delete schema.$schema;
-  return schema;
-})();
 
 /** Human-facing description per Initiative operation. Mutating ones name their
  *  `MutationControl` requirement; the adapter always overwrites
@@ -404,16 +401,40 @@ const INITIATIVE_TOOL_DESCRIPTIONS: Record<InitiativeOperation, string> = {
     + '(the sole operation that may set this state). Requires a non-empty reason. A later '
     + 'deliverable_validate call on an approved Deliverable skips recomputation and leaves the state '
     + 'unchanged. Mutating: pass expected_revision (the Deliverable revision) and provenance.',
+  // MMA Next gap-closure (§15 application surface, §21 success criterion 12): verification
+  // execution, packaging assembly, and Initiative portability.
+  verification_run:
+    "Execute a declared shell command for an Acceptance Criterion's verification (method must be "
+    + "'command' — 'agent-review'/'human' reject with verification_method_not_runnable and stay "
+    + 'reachable only through verification_record) and persist the resulting VerificationRun: pass '
+    + "on exit 0, fail on any other exit code, blocked if the command could not run. Mutating: pass "
+    + 'expected_revision (0 — a VerificationRun is always newly created) and provenance.',
+  deliverable_package:
+    "Assemble a Deliverable's packaging report from its Delivery Contract and CURRENT artifact "
+    + 'membership: which requires entries are covered, by which Artifacts, and which are still '
+    + 'missing, plus the committed packager guidance text. Contract-completeness only — no target '
+    + 'adapter is called and no file content is invented. Incomplete membership still succeeds and '
+    + 'reports the gaps. Mutating: pass expected_revision (the Deliverable revision) and provenance.',
+  initiative_export:
+    'Assemble a complete, self-contained portable snapshot of one Initiative — the Initiative, its '
+    + 'Product, Workspaces with roles and Resources, Tasks, Artifacts, Requirements, Acceptance '
+    + 'Criteria, Decisions, Evidence, Risks, Verification Runs, Phase Records, Deliverables with '
+    + 'membership and history, and every Event — stamped with a schema_version. Use with '
+    + 'initiative_import to move or back up an Initiative across stores.',
+  initiative_import:
+    'Reconstruct an Initiative export snapshot (from initiative_export) into this store, in one '
+    + 'all-or-nothing transaction. Rejects a snapshot whose schema_version this build does not '
+    + 'understand, and rejects (conflict) an Initiative that already exists by uuid or human_key — '
+    + 'import never silently merges. Mutating: pass expected_revision (0) and provenance.',
 };
 
 /** One `mma_<operation>` tool per frozen Initiative operation (FR-3/FR-4,
- *  AC-2.1). `initiative_resume` uses its own request shape (no `operation`/
- *  `input` envelope — see `initiativeResumeRequestSchema`); every other
- *  operation uses the matching `initiativeOperationRequestSchema` member. */
+ *  AC-2.1). The tool name supplies the otherwise-redundant `operation`; every
+ *  tool otherwise uses the matching `initiativeOperationRequestSchema` member. */
 const INITIATIVE_MCP_TOOLS: McpToolDefinition[] = INITIATIVE_OPERATIONS.map((operation) => ({
   name: initiativeToolName(operation),
   description: INITIATIVE_TOOL_DESCRIPTIONS[operation],
-  inputSchema: operation === 'initiative_resume' ? initiativeResumeInputSchema : initiativeToolInputSchema(operation),
+  inputSchema: initiativeToolInputSchema(operation),
 }));
 
 export const MCP_TOOLS: McpToolDefinition[] = [
@@ -492,7 +513,7 @@ export const MCP_TOOLS: McpToolDefinition[] = [
       'Block until an MMA execution reaches a terminal state (or the timeout elapses), then '
       + 'return the same payload as mma_execution_get. A timeout is NOT an error and NOT a '
       + 'failure of the execution: it returns the current running snapshot, and the execution keeps '
-      + 'going. To wait longer, call again with the same executionId.',
+      + 'going. To wait longer, call again with the same executionId — but note that "call again" only happens while your turn is active, and your client is NOT notified when an mma execution finishes (it belongs to the daemon, not to your client\'s task tracking). For work that outlasts a turn, wrap the poll in a background job your client tracks. The execution keeps running either way and its terminal envelope is persisted, so nothing is lost by stopping the wait.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -580,3 +601,35 @@ export const MCP_TOOLS: McpToolDefinition[] = [
   },
   ...INITIATIVE_MCP_TOOLS,
 ];
+
+/**
+ * The argument names each tool actually accepts, taken from the schema it publishes.
+ *
+ * Every `inputSchema` above declares `additionalProperties: false`, and nothing enforced it:
+ * each handler reads the keys it knows off a `Record<string, unknown>` and ignores the rest,
+ * so `mma_run` accepted `{ cwd, request, wat: 'nonsense' }` and ran the task. The cost is not
+ * the nonsense key — it is the near-miss. A caller who puts an option one level too high,
+ * `reviewPolicy` beside `request` instead of inside it, gets a run with the option silently
+ * dropped and nothing in the result to say so. A schema the server publishes and does not
+ * honour is worse than no schema, because the caller has every reason to rely on it.
+ *
+ * Built FROM `MCP_TOOLS`, so a tool that adds an argument accepts it with no second list to
+ * update, and a tool that stops declaring `additionalProperties: false` stops being checked —
+ * the enforcement cannot outlive the promise it enforces.
+ */
+const DECLARED_TOOL_ARGUMENTS: ReadonlyMap<string, ReadonlySet<string>> = new Map(
+  MCP_TOOLS
+    .filter((tool) => tool.inputSchema.additionalProperties === false)
+    .map((tool) => [
+      tool.name,
+      new Set(Object.keys((tool.inputSchema.properties ?? {}) as Record<string, unknown>)),
+    ]),
+);
+
+/** Argument names the caller sent that `toolName` does not declare. Empty for an unknown tool
+ *  (the dispatcher answers that with `unknown_tool`) and for one that permits extras. */
+export function unknownToolArguments(toolName: string, args: Record<string, unknown>): string[] {
+  const declared = DECLARED_TOOL_ARGUMENTS.get(toolName);
+  if (!declared) return [];
+  return Object.keys(args).filter((key) => !declared.has(key));
+}

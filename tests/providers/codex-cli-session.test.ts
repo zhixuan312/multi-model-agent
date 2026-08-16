@@ -13,14 +13,17 @@
 // inputTokens; otherwise priceTokens (which treats input + cachedRead as
 // disjoint buckets) bills the cached portion twice — once at the full
 // input rate and once at the cached-read rate. That's exactly the bug we
-// shipped this fix to close. See
-// `docs/superpowers/specs/...` for the full investigation.
+// shipped this fix to close. The normalization lives in
+// `codex-cli-session.ts:absorbUsage`, and the contract it normalizes TO is the
+// `TokenUsage` docstring in `types/run-result.ts` — both are in the repo, unlike
+// the `docs/superpowers/specs/...` this pointed at, which was migrated out of
+// every repo in July 2026 and had been a dead reference since.
 
 import { describe, it, expect } from 'vitest';
 import { EventEmitter } from 'node:events';
 import { PassThrough } from 'node:stream';
 import { __test } from '../../packages/core/src/providers/codex-cli-session.js';
-import type { TokenUsage } from '../../packages/core/src/providers/runner-types.js';
+import type { TokenUsage } from '../../packages/core/src/types/run-result.js';
 import type { CodexCliEvent } from '../../packages/core/src/providers/codex-cli-event.js';
 
 const { TurnTracker } = __test;
@@ -101,30 +104,18 @@ describe('codex TurnTracker — 9-field TurnResult contract', () => {
     expect(tracker.errorCode).toBe('turn_failed');
   });
 
-  it('produces terminationReason: "time_exceeded" from wall_clock_exceeded errorCode', () => {
-    const cumulative = zeroUsage();
-    const tracker = new TurnTracker(cumulative);
-    // Simulate guard injection setting terminationReason via errorCode
-    tracker.errorCode = 'wall_clock_exceeded';
-    tracker.terminationReason = 'time_exceeded';
-    expect(tracker.terminationReason).toBe('time_exceeded');
+  /**
+   * Three cases here read `tracker.terminationReason = 'time_exceeded'; expect(
+   * tracker.terminationReason).toBe('time_exceeded')` — an assignment, asserted. They tested
+   * the language, not the tracker, and no change to this file could have failed them. Their
+   * stated subject, "guard injection", is `armGuards` in the session: the arming DECISION is
+   * covered by `wallClockDelayMs` in effort.test.ts, and the claude-side equivalent of the
+   * injection itself by claude-session-guard-precedence.test.ts. Deleted rather than restated
+   * — a guard that sets a field is only worth asserting through the guard.
+   */
+  it('starts at ok, so a reason is only ever set by something that observed a failure', () => {
+    expect(new TurnTracker(zeroUsage()).terminationReason).toBe('ok');
   });
-
-  it('produces terminationReason: "aborted" from aborted errorCode', () => {
-    const cumulative = zeroUsage();
-    const tracker = new TurnTracker(cumulative);
-    tracker.errorCode = 'aborted';
-    tracker.terminationReason = 'aborted';
-    expect(tracker.terminationReason).toBe('aborted');
-  });
-
-  it('produces terminationReason: "stalled" from guard injection', () => {
-    const cumulative = zeroUsage();
-    const tracker = new TurnTracker(cumulative);
-    tracker.terminationReason = 'stalled';
-    expect(tracker.terminationReason).toBe('stalled');
-  });
-
 });
 
 describe('codex TurnTracker auth error details', () => {
@@ -148,29 +139,13 @@ describe('codex TurnTracker auth error details', () => {
     expect(tracker.errorMessage).toBe('Missing credentials. Run codex login or set OPENAI_API_KEY');
   });
 
-  it('propagates errorMessage from the tracker into the built TurnResult', () => {
-    const tracker = new TurnTracker(zeroUsage());
-    tracker.consume({
-      kind: 'error',
-      message: 'Missing credentials. Run codex login or set OPENAI_API_KEY',
-    } as CodexCliEvent);
-
-    const result = {
-      output: '',
-      usage: zeroUsage(),
-      costUSD: 0,
-      turns: tracker.turns,
-      durationMs: 0,
-      terminationReason: tracker.terminationReason,
-      ...(tracker.errorCode && { errorCode: tracker.errorCode }),
-      ...(tracker.errorMessage && { errorMessage: tracker.errorMessage }),
-      filesWritten: [...tracker.filesWritten],
-      usedShell: tracker.usedShell,
-    };
-
-    expect(result).toHaveProperty('errorMessage');
-    expect(result.errorMessage).toBe('Missing credentials. Run codex login or set OPENAI_API_KEY');
-  });
+  /**
+   * Deleted: a case that hand-copied `send()`'s conditional spread into the test body and then
+   * asserted the copy carried `errorMessage`. It exercised the copy, not the session — a
+   * regression in the real spread would have left it green — and the two cases above already
+   * assert the tracker fields it read from. The spread's own behaviour (error fields present
+   * only when set) is pinned in turn-result-shape.test.ts against a real producer.
+   */
 });
 
 describe('codex TurnTracker — TokenUsage disjoint-partition contract', () => {
@@ -400,5 +375,45 @@ describe('codex killGracefully — signals the whole process group', () => {
       vi.useRealTimers();
     }
     expect(killCalls.some(([pid, sig]) => pid === -54321 && sig === 'SIGKILL')).toBe(true);
+  });
+});
+
+/**
+ * The observability event must report the same tokens the TurnResult does.
+ *
+ * `absorbUsage` spends fifteen lines explaining that codex's `input_tokens` is GROSS — it
+ * INCLUDES `cached_input_tokens` — and that our contract needs the disjoint Anthropic shape.
+ * The `codex_turn_completed` bus event then emitted the raw gross number under the field name
+ * `inputTokens`, beside a `cachedInputTokens` that is a SUBSET of it rather than a sibling.
+ *
+ * The claude runner emits the NORMALIZED figure on its own `claude_turn_completed`. So the
+ * same field, on the same event family, meant two different things depending on which runner
+ * ran the task — and the operator reading the log saw a larger input count than the run was
+ * billed on, in exactly the shape this file exists to warn about.
+ */
+describe('codex turn_completed event agrees with the recorded usage', () => {
+  it('logs the NET input tokens and the disjoint cached count, not the gross figure', () => {
+    const entries: Array<Record<string, unknown>> = [];
+    const bus = { emitPlainEntry: (e: unknown) => { entries.push(e as Record<string, unknown>); } };
+    const cumulative = zeroUsage();
+    const tracker = new TurnTracker(cumulative, bus);
+
+    tracker.consume(turnCompletedEvent({
+      input_tokens: 1000,          // GROSS: includes the 800 cached below
+      cached_input_tokens: 800,
+      output_tokens: 50,
+      reasoning_output_tokens: 25,
+    }));
+
+    const recorded = tracker.flushUsageDelta();
+    expect(recorded).toEqual({ inputTokens: 200, outputTokens: 75, cachedReadTokens: 800, cachedNonReadTokens: 0 });
+
+    const event = entries.find((e) => JSON.stringify(e).includes('codex_turn_completed'))!;
+    const fields = JSON.stringify(event);
+    // The log must carry 200, the number the run is billed on — never the gross 1000.
+    expect(fields).toContain('200');
+    expect(fields).not.toMatch(/"inputTokens":\s*1000/);
+    expect(fields).toContain('800');
+    expect(fields).toContain('75');
   });
 });

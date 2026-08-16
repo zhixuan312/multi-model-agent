@@ -46,7 +46,7 @@ describe('Execution linkage integration', () => {
       expect(h.unconsumedOutbox()).toHaveLength(1);
       const restarted = await h.restart();
       try {
-        const resume = await fetch(`${restarted.baseUrl}/initiatives`, { method: 'POST', headers: headers(restarted.token), body: JSON.stringify({ operation: 'initiative_resume', initiative: { uuid: initiative.uuid } }) });
+        const resume = await fetch(`${restarted.baseUrl}/initiatives`, { method: 'POST', headers: headers(restarted.token), body: JSON.stringify({ operation: 'initiative_resume', input: { initiative: { uuid: initiative.uuid } } }) });
         const record = await resume.json() as { tasks: Array<{ status: string; outcome: string | null; executionRefs: string[] }>; evidence: unknown[] };
         expect(record.tasks).toEqual([expect.objectContaining({ status: 'completed', outcome: 'succeeded_with_concerns', executionRefs: [executionId] })]);
         expect(record.evidence).toHaveLength(1);
@@ -91,7 +91,7 @@ describe('Execution linkage integration', () => {
       try {
         const resume = await fetch(`${restarted.baseUrl}/initiatives`, {
           method: 'POST', headers: headers(restarted.token),
-          body: JSON.stringify({ operation: 'initiative_resume', initiative: { uuid: initiative.uuid } }),
+          body: JSON.stringify({ operation: 'initiative_resume', input: { initiative: { uuid: initiative.uuid } } }),
         });
         const record = await resume.json() as {
           tasks: unknown[];
@@ -164,7 +164,7 @@ describe('Execution linkage integration', () => {
       try {
         const resume = await fetch(`${restarted.baseUrl}/initiatives`, {
           method: 'POST', headers: headers(restarted.token),
-          body: JSON.stringify({ operation: 'initiative_resume', initiative: { uuid: initiative.uuid } }),
+          body: JSON.stringify({ operation: 'initiative_resume', input: { initiative: { uuid: initiative.uuid } } }),
         });
         const record = await resume.json() as {
           evidence: Array<{ kind: string; locator: string; content_hash: string | null }>;

@@ -6,6 +6,18 @@ export interface AdapterCredentials {
   githubPat?: string;
 }
 
+/**
+ * The adapters whose absence from `resolveEnabledAdapters` means a MISSING CREDENTIAL rather than
+ * an operator switching them off. Only `semantic_scholar` is credential-gated below: the rest are
+ * keyless (arXiv, OpenAlex, Crossref) or take an OPTIONAL token that only raises rate limits
+ * (GitHub, PubMed), so they appear whenever their config flag is true.
+ *
+ * Read by the orchestrator so a skipped adapter reports why it was skipped. It used to report
+ * `no_api_key_configured` for every skip, which sent an operator who had deliberately set
+ * `builtinAdapters.crossref: false` looking for a Crossref API key that does not exist.
+ */
+export const CREDENTIAL_GATED_ADAPTERS: ReadonlySet<AdapterId> = new Set<AdapterId>(['semantic_scholar']);
+
 export function resolveEnabledAdapters(
   cfg: ResearchConfig['builtinAdapters'],
   creds: AdapterCredentials = {},

@@ -7,40 +7,64 @@ const TrimmedNonEmpty = z.string().trim().min(1);
 
 // === Research config schema ===
 
+// Named constants, for the reason the server block below states: a Zod `.default()` value is
+// handed back as-is and never re-parsed, so the per-field `.default(...)` calls do NOT fill in a
+// block-level default. Each value is therefore true at three levels — per field, per block, and
+// on the whole schema — and each level is reached by a different input shape (field omitted,
+// block omitted, `research` omitted). Writing the literals out three times, which is how this
+// block used to read, meant a maintainer changing a default saw it take effect on whichever
+// shape they happened to test. `research-default-agreement.test.ts` pins the three levels equal.
+
+const DEFAULT_RESEARCH_BRAVE = {
+  apiKeys: [] as string[],
+  timeoutMs: 8000,
+  maxResultsPerQuery: 20,
+  perCallBackoffMs: 250,
+  // Minimum spacing between two requests on the SAME key. Brave's free tier is 1 req/s/token;
+  // without this gate the orchestrator's concurrent fan-out bursts multiple queries onto a
+  // round-robin key within milliseconds → 429. 0 disables the gate. 1100ms keeps each key just
+  // under the 1 req/s ceiling.
+  minPerKeyIntervalMs: 1100,
+};
+
+const DEFAULT_RESEARCH_ADAPTERS = {
+  arxiv: true,
+  semanticScholar: true,
+  githubSearch: true,
+  openalex: true,
+  crossref: true,
+  pubmed: true,
+};
+
+const DEFAULT_RESEARCH = {
+  brave: DEFAULT_RESEARCH_BRAVE,
+  builtinAdapters: DEFAULT_RESEARCH_ADAPTERS,
+};
+
 export const ResearchConfigSchema = z.object({
   brave: z.object({
     apiKeys: z.array(TrimmedNonEmpty)
               .max(32)
               .transform(arr => Array.from(new Set(arr)))
-              .default([]),
-    timeoutMs: z.number().int().positive().max(30_000).default(8000),
-    maxResultsPerQuery: z.number().int().positive().max(20).default(20),
-    perCallBackoffMs: z.number().int().min(0).max(2_000).default(250),
-    // Minimum spacing between two requests on the SAME key. Brave's free tier
-    // is 1 req/s/token; without this gate the orchestrator's concurrent fan-out
-    // bursts multiple queries onto a round-robin key within milliseconds → 429.
-    // 0 disables the gate. 1100ms keeps each key just under the 1 req/s ceiling.
-    minPerKeyIntervalMs: z.number().int().min(0).max(10_000).default(1100),
-  }).strict().default(() => ({ apiKeys: [] as string[], timeoutMs: 8000, maxResultsPerQuery: 20, perCallBackoffMs: 250, minPerKeyIntervalMs: 1100 })),
+              .default(DEFAULT_RESEARCH_BRAVE.apiKeys),
+    timeoutMs: z.number().int().positive().max(30_000).default(DEFAULT_RESEARCH_BRAVE.timeoutMs),
+    maxResultsPerQuery: z.number().int().positive().max(20).default(DEFAULT_RESEARCH_BRAVE.maxResultsPerQuery),
+    perCallBackoffMs: z.number().int().min(0).max(2_000).default(DEFAULT_RESEARCH_BRAVE.perCallBackoffMs),
+    minPerKeyIntervalMs: z.number().int().min(0).max(10_000).default(DEFAULT_RESEARCH_BRAVE.minPerKeyIntervalMs),
+  }).strict().default(() => DEFAULT_RESEARCH_BRAVE),
   builtinAdapters: z.object({
-    arxiv: z.boolean().default(true),
-    semanticScholar: z.boolean().default(true),
+    arxiv: z.boolean().default(DEFAULT_RESEARCH_ADAPTERS.arxiv),
+    semanticScholar: z.boolean().default(DEFAULT_RESEARCH_ADAPTERS.semanticScholar),
     semanticScholarApiKey: z.string().min(1).optional(),
-    githubSearch: z.boolean().default(true),
+    githubSearch: z.boolean().default(DEFAULT_RESEARCH_ADAPTERS.githubSearch),
     githubPat: z.string().min(1).optional(),
-    openalex: z.boolean().default(true),
-    crossref: z.boolean().default(true),
-    pubmed: z.boolean().default(true),
+    openalex: z.boolean().default(DEFAULT_RESEARCH_ADAPTERS.openalex),
+    crossref: z.boolean().default(DEFAULT_RESEARCH_ADAPTERS.crossref),
+    pubmed: z.boolean().default(DEFAULT_RESEARCH_ADAPTERS.pubmed),
     pubmedApiKey: z.string().min(1).optional(),
     contactEmail: z.string().email().optional(),
-  }).strict().default(() => ({
-    arxiv: true, semanticScholar: true, githubSearch: true,
-    openalex: true, crossref: true, pubmed: true,
-  })),
-}).strict().default(() => ({
-  brave: { apiKeys: [] as string[], timeoutMs: 8000, maxResultsPerQuery: 20, perCallBackoffMs: 250, minPerKeyIntervalMs: 1100 },
-  builtinAdapters: { arxiv: true, semanticScholar: true, githubSearch: true, openalex: true, crossref: true, pubmed: true },
-}));
+  }).strict().default(() => DEFAULT_RESEARCH_ADAPTERS),
+}).strict().default(() => DEFAULT_RESEARCH);
 
 export type ResearchConfig = z.infer<typeof ResearchConfigSchema>;
 
@@ -56,8 +80,16 @@ const effortSchema = z.enum(['none', 'low', 'medium', 'high', 'xhigh', 'max']);
 // costUSD: 0 instead of null).
 const tokenCostSchema = z.number().nonnegative().finite().optional();
 
+const MODEL_1_1_MESSAGE =
+  'agents.<tier>.model must be a single non-empty string id; v4.0 enforces tier → single model 1:1 invariant';
+
 const baseAgentFields = {
-  model: z.string().min(1, "agents.<tier>.model must be a single non-empty string id; v4.0 enforces tier → single model 1:1 invariant"),
+  // The custom message covers BOTH ways this field is got wrong, because the wrong TYPE is the
+  // likelier of the two: a config written against the pre-v4.0 multi-model shape carries
+  // `model: ['a', 'b']`, and Zod's default for that reads "expected string, received array" —
+  // accurate, and no help at all in working out what to write instead. The empty-string case had
+  // the explanatory message; the array case, the one a migrating user actually hits, did not.
+  model: z.string({ error: MODEL_1_1_MESSAGE }).min(1, MODEL_1_1_MESSAGE),
   effort: effortSchema.optional(),
   inputCostPerMTok: tokenCostSchema,
   outputCostPerMTok: tokenCostSchema,

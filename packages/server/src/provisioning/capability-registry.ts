@@ -53,14 +53,13 @@ export interface ClientCapability {
   /** Plural on purpose: a client may have OS-specific registration locations
    *  (Claude Desktop's macOS vs Windows paths). Unrelated to skill roots.
    *
-   *  EMPTY means "unverified": the path is not confirmed against the vendor's
-   *  own documentation, so no writer may target this client. Emptiness is the
-   *  uniform, checkable signal -- never leave a half-trusted path here.
+   *  EMPTY means "no verified path, so no writer may target this client".
+   *  Emptiness is the uniform, checkable signal -- never leave a half-trusted
+   *  path here.
    *
-   *  Only `vscode` is still empty. Microsoft documents the workspace path
-   *  (.vscode/mcp.json) but reaches the user-level file solely through the
-   *  "MCP: Open User Configuration" command, and VS Code profiles are
-   *  relocatable, so no stable home-level path exists to derive. See
+   *  TWO rows are empty, for opposite reasons, and each row states its own:
+   *  `vscode` never had a derivable home-level path to begin with, and
+   *  `antigravity` had one that the vendor retired. See
    *  docs/verification/mcp-client-registration-profiles.md. */
   mcpConfigPaths: readonly string[];
   mcpConfigFormat: McpConfigFormat;

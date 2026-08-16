@@ -120,6 +120,50 @@ describe('commitAll', () => {
   });
 });
 
+describe('commit authorship belongs to the caller', () => {
+  it('commits as the identity the caller configured, not a fixed engine author', async () => {
+    // The engine used to pass `-c user.email=mma@localhost -c user.name='mma worker'` on every
+    // commit, which OVERRIDES whatever the user configured — so work done in the user's own
+    // repository, on the user's own branch, was attributed to an author they never set up. The
+    // `[mma] <route>:` commit message already carries the provenance.
+    git(['config', 'user.name', 'Ada Lovelace']);
+    git(['config', 'user.email', 'ada@example.com']);
+    const baseline = await captureBaseline(repo);
+    writeFileSync(join(repo, 'worker.ts'), 'export const x = 1;\n');
+
+    await commitAll(repo, baseline, '[mma] delegate: add worker.ts');
+
+    expect(git(['log', '-1', '--format=%an <%ae>']).trim()).toBe('Ada Lovelace <ada@example.com>');
+  });
+
+  it('falls back to an engine identity ONLY when git can resolve none', async () => {
+    // The case that presumably motivated the hardcoded author: with no identity anywhere, `git
+    // commit` fails outright with "Please tell me who you are". Losing a worker's finished edits
+    // to a missing `git config` is worse than a placeholder author, so each field falls back
+    // independently — but only here.
+    git(['config', '--unset', 'user.name']);
+    git(['config', '--unset', 'user.email']);
+    const previousGlobal = process.env.GIT_CONFIG_GLOBAL;
+    const previousSystem = process.env.GIT_CONFIG_SYSTEM;
+    process.env.GIT_CONFIG_GLOBAL = '/dev/null';
+    process.env.GIT_CONFIG_SYSTEM = '/dev/null';
+    try {
+      const baseline = await captureBaseline(repo);
+      writeFileSync(join(repo, 'worker.ts'), 'export const x = 1;\n');
+
+      const out = await commitAll(repo, baseline, '[mma] delegate: add worker.ts');
+
+      expect(out.committed, 'a missing git identity must never lose the work').toBe(true);
+      expect(git(['log', '-1', '--format=%an <%ae>']).trim()).toBe('mma worker <mma@localhost>');
+    } finally {
+      if (previousGlobal === undefined) delete process.env.GIT_CONFIG_GLOBAL;
+      else process.env.GIT_CONFIG_GLOBAL = previousGlobal;
+      if (previousSystem === undefined) delete process.env.GIT_CONFIG_SYSTEM;
+      else process.env.GIT_CONFIG_SYSTEM = previousSystem;
+    }
+  });
+});
+
 describe('assertRepoUntampered', () => {
   it('passes when the worker left git alone', async () => {
     const baseline = await captureBaseline(repo);

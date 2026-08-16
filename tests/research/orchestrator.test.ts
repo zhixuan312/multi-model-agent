@@ -31,7 +31,7 @@ describe('orchestrator', () => {
 
   it('fans out all 8 source groups', async () => {
     const plan: QueryPlan = {
-      braveQueries:           [{ q: 'b1' }],
+      braveQueries:           [{ q: 'b1', endpoint: 'web' }],
       arxivQueries:           ['a1'],
       semanticScholarQueries: ['s1'],
       githubQueries:          [{ q: 'g1', kind: 'repo' }, { q: 'g2', kind: 'code' }],
@@ -66,7 +66,7 @@ describe('orchestrator', () => {
     deps.brave.search = async (q) => { capturedQuery = q; return { results: [], keyIndex: 0, attempts: [] }; };
     const plan: QueryPlan = {
       ...emptyPlan,
-      braveQueries: [{ q: 'regulation', siteFilter: 'site:sec.gov' }],
+      braveQueries: [{ q: 'regulation', endpoint: 'web', siteFilter: 'site:sec.gov' }],
     };
     await runOrchestrator(plan, deps);
     expect(capturedQuery).toBe('site:sec.gov regulation');
@@ -89,7 +89,7 @@ describe('orchestrator', () => {
   it('populates publishedAt from brave pageAge', async () => {
     const plan: QueryPlan = {
       ...emptyPlan,
-      braveQueries: [{ q: 'q', freshness: 'pm' }],
+      braveQueries: [{ q: 'q', freshness: 'pm', endpoint: 'web' }],
     };
     const pack = await runOrchestrator(plan, fakeDeps());
     const braveSource = pack.sources.find(s => s.source === 'brave');
@@ -105,13 +105,28 @@ describe('orchestrator', () => {
     expect(pack.failedAttempts[0]!.reason).toBe('rate_limited');
   });
 
-  it('skips disabled adapters', async () => {
+  // The reason must name the actual cause. Every skip used to report `no_api_key_configured`,
+  // including for adapters that take no key at all — so an operator who set
+  // `builtinAdapters.openalex: false` read "no API key configured" in the Sources-used table and
+  // went looking for an OpenAlex key that does not exist.
+  it('reports a config-disabled adapter as disabled, not as missing a key', async () => {
     const deps = fakeDeps();
     deps.enabledAdapters = ['arxiv'];
     const plan: QueryPlan = { ...emptyPlan, openalexQueries: ['x'] };
     const pack = await runOrchestrator(plan, deps);
     expect(pack.sources.length).toBe(0);
     expect(pack.failedAttempts.length).toBe(1);
+    expect(pack.failedAttempts[0]!.reason).toBe('adapter_disabled');
+  });
+
+  it('still reports a missing key as a missing key, for the one credential-gated adapter', async () => {
+    // `semantic_scholar` is the only adapter `resolveEnabledAdapters` withholds for a missing
+    // credential rather than a config flag, so it is the only skip where "no API key" is the
+    // honest answer.
+    const deps = fakeDeps();
+    deps.enabledAdapters = ['arxiv'];
+    const plan: QueryPlan = { ...emptyPlan, semanticScholarQueries: ['x'] };
+    const pack = await runOrchestrator(plan, deps);
     expect(pack.failedAttempts[0]!.reason).toBe('no_api_key_configured');
   });
 

@@ -18,8 +18,6 @@ vi.mock('../../packages/core/src/unified/repo-commit.js', () => ({
   captureBaseline: vi.fn().mockResolvedValue({ head: 'abc123', branch: 'mma/2026-07-31-demo', dirtyAtDispatch: false }),
   assertRepoUntampered: vi.fn().mockResolvedValue(undefined),
   commitAll: vi.fn().mockResolvedValue({ committed: true, head: 'def456', filesChanged: ['src/a.ts'] }),
-  isGitRepo: vi.fn().mockResolvedValue(true),
-  filesChangedSince: vi.fn().mockResolvedValue([]),
 }));
 
 import { runTwoPhasePipeline, type PipelineInput } from '../../packages/core/src/unified/two-phase-pipeline.js';
@@ -42,6 +40,8 @@ const snapshot: ContractPlanSnapshot = {
   tasks: [{
     id: 'I-9',
     title: 'Task I-9: Demo (AC-1.1)',
+    output: 'src/demo.ts',
+    dependencies: 'none',
     contract: { inputsRequest: 'x', outputsResponse: 'y', dataMapping: 'z', errors: 'e', behaviorInvariants: 'b' },
     acceptanceTests: [{ path: 'tests/gen/demo.test.ts', source: 'test', command: 'true ok' }],
   }],

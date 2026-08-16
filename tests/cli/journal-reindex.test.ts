@@ -57,7 +57,7 @@ async function runCli(argv: string[], root: string): Promise<string> {
     stderr: () => true,
     exit: (() => {
       throw new Error('exit');
-    }) as never,
+    }),
   }).catch((error: unknown) => {
     if (!(error instanceof Error) || error.message !== 'exit') throw error;
   });
@@ -154,10 +154,10 @@ describe('mma journal reindex', () => {
         stderr.push(line);
         return true;
       },
-      exit: ((code: number) => {
+      exit: ((code: number): never => {
         exitCode = code;
         throw new Error('exit');
-      }) as never,
+      }),
     }).catch((error: unknown) => {
       if (!(error instanceof Error) || error.message !== 'exit') throw error;
     });

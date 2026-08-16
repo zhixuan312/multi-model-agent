@@ -32,10 +32,22 @@ function writeConfig(homeDir: string, obj: unknown): void {
   writeFileSync(join(homeDir, 'config.json'), JSON.stringify(obj), { mode: 0o600 });
 }
 
-function readConfig(homeDir: string): unknown {
+/**
+ * The written config, narrowed to the fields these tests actually read.
+ *
+ * It returned `unknown` and every caller wrote `as any` to get at `.telemetry.enabled` — which
+ * also disabled checking on `.server.port` beside it, so a typo in either path would have read
+ * `undefined` and failed with a confusing message instead of a compile error.
+ */
+interface WrittenConfig {
+  telemetry?: { enabled?: boolean };
+  server?: { port?: number };
+}
+
+function readConfig(homeDir: string): WrittenConfig | null {
   const p = join(homeDir, 'config.json');
   if (!existsSync(p)) return null;
-  return JSON.parse(readFileSync(p, 'utf8'));
+  return JSON.parse(readFileSync(p, 'utf8')) as WrittenConfig;
 }
 
 // ─── status ──────────────────────────────────────────────────────────────────
@@ -204,8 +216,8 @@ describe('mma telemetry enable', () => {
         stderr: stderrFn,
       });
       expect(code).toBe(0);
-      const cfg = readConfig(tmp) as any;
-      expect(cfg.telemetry.enabled).toBe(true);
+      const cfg = readConfig(tmp);
+      expect(cfg?.telemetry?.enabled).toBe(true);
       expect(stdout.join('')).toContain('enabled');
     } finally {
       rmSync(tmp, { recursive: true, force: true });
@@ -224,9 +236,9 @@ describe('mma telemetry enable', () => {
         stderr: stderrFn,
       });
       expect(code).toBe(0);
-      const cfg = readConfig(tmp) as any;
-      expect(cfg.telemetry.enabled).toBe(true);
-      expect(cfg.server.port).toBe(8080);
+      const cfg = readConfig(tmp);
+      expect(cfg?.telemetry?.enabled).toBe(true);
+      expect(cfg?.server?.port).toBe(8080);
     } finally {
       rmSync(tmp, { recursive: true, force: true });
     }
@@ -244,8 +256,8 @@ describe('mma telemetry enable', () => {
         stderr: stderrFn,
       });
       expect(code).toBe(0);
-      const cfg = readConfig(tmp) as any;
-      expect(cfg.telemetry.enabled).toBe(true);
+      const cfg = readConfig(tmp);
+      expect(cfg?.telemetry?.enabled).toBe(true);
     } finally {
       rmSync(tmp, { recursive: true, force: true });
     }
@@ -276,8 +288,8 @@ describe('mma telemetry disable', () => {
       expect(code).toBe(0);
 
       // config updated
-      const cfg = readConfig(tmp) as any;
-      expect(cfg.telemetry.enabled).toBe(false);
+      const cfg = readConfig(tmp);
+      expect(cfg?.telemetry?.enabled).toBe(false);
 
       // generation bumped
       const gen = readFileSync(join(tmp, 'telemetry-generation'), 'utf8').trim();
@@ -309,8 +321,8 @@ describe('mma telemetry disable', () => {
       });
       expect(code).toBe(0);
 
-      const cfg = readConfig(tmp) as any;
-      expect(cfg.telemetry.enabled).toBe(false);
+      const cfg = readConfig(tmp);
+      expect(cfg?.telemetry?.enabled).toBe(false);
 
       // generation created and bumped to 1
       const genPath = join(tmp, 'telemetry-generation');
@@ -328,6 +340,40 @@ describe('mma telemetry disable', () => {
 // ─── reset-id ─────────────────────────────────────────────────────────────────
 
 describe('mma telemetry reset-id', () => {
+  /**
+   * The command prints "Identity reset". It must be true.
+   *
+   * `revokeIdentity` bumped the generation and deleted the queue, and left `identity.json` — the
+   * installId AND the Ed25519 signing keypair — exactly as it was. Every event after a reset
+   * shipped the same installId the user had just asked to be rid of. The generation bump is not a
+   * substitute: the flusher never puts `generation` in the upload body, and the backend accepts it
+   * as passthrough without acting on it, so nothing downstream can tell a pre- from a
+   * post-revocation event.
+   *
+   * The sibling case below asserted generation, queue and the legacy `install-id` file — the three
+   * things that DID happen — so it stayed green throughout.
+   */
+  it('actually replaces the install identity, not just the generation counter', async () => {
+    const tmp = setupTempHome();
+    try {
+      const { getOrCreateIdentity } = await import('../../packages/server/src/telemetry/identity.js');
+      const before = getOrCreateIdentity(tmp);
+
+      const { stdoutFn, stderrFn } = captureOutput();
+      expect(await runTelemetry({ subcommand: 'reset-id', homeDir: tmp, stdout: stdoutFn, stderr: stderrFn })).toBe(0);
+
+      const after = getOrCreateIdentity(tmp);
+      expect(after.installId).not.toBe(before.installId);
+      // The signing key must rotate too — a fresh id under the old key is still the same install
+      // to a backend doing trust-on-first-use on the public key.
+      expect(after.publicKeyRaw).not.toBe(before.publicKeyRaw);
+      expect(after.privateKeyPkcs8).not.toBe(before.privateKeyPkcs8);
+    } finally {
+      rmSync(tmp, { recursive: true, force: true });
+    }
+  });
+
+
   it('revokeIdentity (bumps generation + deletes queue) + deletes install-id', async () => {
     const tmp = setupTempHome();
     try {
@@ -410,9 +456,9 @@ describe('mma telemetry dump-queue', () => {
       });
       expect(code).toBe(0);
       const out = stdout.join('');
-      const parsed = JSON.parse(out) as any[];
+      const parsed = JSON.parse(out) as Array<{ event: { type?: string; n?: number } }>;
       expect(parsed).toHaveLength(1);
-      expect(parsed[0].event.type).toBe('session.started');
+      expect(parsed[0]?.event.type).toBe('session.started');
     } finally {
       rmSync(tmp, { recursive: true, force: true });
     }
@@ -454,9 +500,9 @@ describe('mma telemetry dump-queue', () => {
         stderr: stderrFn,
       });
       expect(code).toBe(0);
-      const parsed = JSON.parse(stdout.join('')) as any[];
+      const parsed = JSON.parse(stdout.join('')) as Array<{ event: { type?: string; n?: number } }>;
       expect(parsed).toHaveLength(2);
-      expect(parsed[0].event.n).toBe(1);
+      expect(parsed[0]?.event.n).toBe(1);
       expect(parsed[1].event.n).toBe(2);
     } finally {
       rmSync(tmp, { recursive: true, force: true });

@@ -223,7 +223,30 @@ describe('the two digests answer different questions', () => {
     const before = canonicalSubjectDigest({ type: 'files', artifacts: [{ root: 'workspaceRoot', path: 'report.md', digest: 'sha256:1' }] });
     const after = canonicalSubjectDigest({ type: 'files', artifacts: [{ root: 'workspaceRoot', path: 'report.md', digest: 'sha256:2' }] });
     expect(before).not.toBe(after);
-    // The contract digest is unmoved by the output changing underneath it.
-    expect(canonicalContractDigest(content)).toBe(canonicalContractDigest(content));
+
+    // This used to assert `canonicalContractDigest(content) === canonicalContractDigest(content)`
+    // under a comment claiming the contract digest is unmoved by the output changing underneath
+    // it. Computing the same digest twice from the same unchanged input never involves the output
+    // at all — it passed for any implementation. The two properties the digest actually promises
+    // are asserted instead, and neither was covered anywhere.
+
+    // Artifact ORDER is normalised away: the digest sorts artifacts by (root, path), so the same
+    // set declared in a different order is the same contract.
+    const artifactsAscending = canonicalContractDigest({
+      ...content,
+      artifacts: [{ root: 'workspaceRoot', path: 'a.md' }, { root: 'workspaceRoot', path: 'b.md' }],
+    });
+    const artifactsDescending = canonicalContractDigest({
+      ...content,
+      artifacts: [{ root: 'workspaceRoot', path: 'b.md' }, { root: 'workspaceRoot', path: 'a.md' }],
+    });
+    expect(artifactsDescending).toBe(artifactsAscending);
+
+    // Acceptance ORDER is semantic and preserved — declared commands run in that order, so two
+    // different orders are two different contracts.
+    const acceptanceOne = { id: 'AC-1', criterion: 'first', method: 'human' as const, references: [{ kind: 'none' as const, reason: 'internal' }] };
+    const acceptanceTwo = { id: 'AC-2', criterion: 'second', method: 'human' as const, references: [{ kind: 'none' as const, reason: 'internal' }] };
+    expect(canonicalContractDigest({ ...content, acceptance: [acceptanceTwo, acceptanceOne] }))
+      .not.toBe(canonicalContractDigest({ ...content, acceptance: [acceptanceOne, acceptanceTwo] }));
   });
 });

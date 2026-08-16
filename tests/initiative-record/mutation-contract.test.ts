@@ -12,7 +12,7 @@ describe('Initiative mutation contract', () => {
     const store = InitiativeRecordStore.open({ dbPath: join(dir, 'initiatives.db') });
     try {
       const request = { operation: 'product_create' as const, input: { name: 'MMA', slug: 'mma' }, expected_revision: 0, idempotency_key: 'product-mma', provenance };
-      const first = store.execute(request);
+      const first = store.execute(request) as { uuid: string };
       const replay = store.execute(request);
       expect(replay).toEqual(first);
       expect(store.listEvents({})).toHaveLength(1);
@@ -26,7 +26,7 @@ describe('Initiative mutation contract', () => {
     const dir = mkdtempSync(join(tmpdir(), 'mma-initiative-revision-'));
     const store = InitiativeRecordStore.open({ dbPath: join(dir, 'initiatives.db') });
     try {
-      const product = store.execute({ operation: 'product_create', input: { name: 'MMA', slug: 'mma' }, expected_revision: 0, provenance });
+      const product = store.execute({ operation: 'product_create', input: { name: 'MMA', slug: 'mma' }, expected_revision: 0, provenance }) as { uuid: string };
       expect(() => store.execute({ operation: 'initiative_create', input: { product_id: product.uuid, title: 'T', goal: 'G', status: 'open', outcome: null }, expected_revision: 3, provenance })).toThrow(/revision_conflict/);
       expect(store.listEvents({})).toHaveLength(1);
       expect(() => store.execute({ operation: 'initiative_create', input: { product_id: product.uuid, title: 'T', goal: 'G', status: 'closed', outcome: null }, expected_revision: 0, provenance })).toThrow(/invalid_request/);

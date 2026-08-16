@@ -54,7 +54,7 @@ describe('skill validity', () => {
       //     constants were exported and applied nowhere.
       // Both are operational contracts a caller executes, so they belong in the
       // stage that runs them, not in a summary elsewhere.
-      const LINE_BUDGET = { 'mma-flow': 780 };
+      const LINE_BUDGET: Record<string, number> = { 'mma-flow': 780 };
       const budget = LINE_BUDGET[dir] ?? 320;
       expect(content.split('\n').length).toBeLessThanOrEqual(budget);
     });
@@ -66,9 +66,13 @@ describe('skill validity', () => {
     });
   }
 
-  it('every dist SKILL.md has version matching server package.json', () => {
-    const distRoot = 'packages/server/dist/skills';
-    if (!existsSync(distRoot)) return; // build hasn't run in CI yet
+  // `it.skipIf`, not an early `return`. The body used to open with
+  // `if (!existsSync(distRoot)) return;`, which reports a PASS for a check that ran nothing —
+  // indistinguishable in the output from one that verified every dist skill. This is the guard
+  // against publishing skills stamped with the wrong version, so "did it actually run?" is the
+  // whole question, and the runner should answer it.
+  const distRoot = 'packages/server/dist/skills';
+  it.skipIf(!existsSync(distRoot))('every dist SKILL.md has version matching server package.json', () => {
     const pkgVersion = JSON.parse(readFileSync('packages/server/package.json', 'utf8')).version;
     const distDirs = readdirSync(distRoot).filter(d => !d.startsWith('_') && statSync(join(distRoot, d)).isDirectory());
     for (const dir of distDirs) {

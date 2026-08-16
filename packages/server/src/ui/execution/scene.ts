@@ -79,8 +79,14 @@ const REVIEWER_LENS =
   + `<circle cx="19.6" cy="18.4" r="2.8" fill="none" class="s-cool-s" stroke-width="1"/>`
   + `<path d="M17.9 17 A2.2 2.2 0 0 1 19.3 16.2" fill="none" class="s-cool-s" stroke-width=".65" stroke-linecap="round" opacity=".8"/>`;
 
-/** Tools, drawn in the forearm's frame and scaled against the figure's 4.6-unit head. */
-const TOOLS: Record<ToolId, string> = {
+/**
+ * Tools, drawn in the forearm's frame and scaled against the figure's 4.6-unit head.
+ *
+ * Exported so the scene contract test can prove every `TYPE_ART` tool names a real one —
+ * `sceneSvg` resolves this with a silent fallback, so a typo would render a type with no prop
+ * and pass every other assertion.
+ */
+export const TOOLS: Record<ToolId, string> = {
   lens:
     `<line x1="30.2" y1="17.5" x2="26.9" y2="18.1" class="s-fig-s" stroke-width="1.5" stroke-linecap="round"/>`
     + `<circle cx="23.9" cy="18.4" r="2.9" class="s-acc-f" fill-opacity=".12"/>`
@@ -159,8 +165,13 @@ function gear(skipTooth: number): string {
 
 const rule = (d: string, w = '.6', extra = '') => `<path d="${d}" class="s-line-s" stroke-width="${w}" stroke-linecap="round" opacity=".5"${extra}/>`;
 
-/** Subjects. Every one sits on or above the bench line; none crosses y 23. */
-const SUBJECTS: Record<string, () => string> = {
+/**
+ * Subjects. Every one sits on or above the bench line; none crosses y 23.
+ *
+ * Exported for the same reason as {@link TOOLS}: `SUBJECTS[art.subject] ?? SUBJECTS.default`
+ * means a misspelled subject draws the generic bench and nothing fails.
+ */
+export const SUBJECTS: Record<string, () => string> = {
   default: () => sheet() + rule('M14.4 17.4h9.6') + rule('M14.4 19.6h9.6') + rule('M14.4 21.8h6'),
   audit: () => sheet()
     + `<rect x="14.4" y="16.4" width="7" height="1.2" rx=".6" class="s-line" opacity=".7"/>`
@@ -230,8 +241,13 @@ const SUBJECTS: Record<string, () => string> = {
  * overshoots one hand and a narrow stack leaves the other holding air. Each subject is scaled
  * to land 9 units wide at most, 8.6 tall at most, centred on x 26.3 with its underside at
  * y 11.6 — which is exactly where the two raised hands meet.
+ *
+ * Exported so the scene contract test can check `raiseTransform`'s OUTPUT against its INPUT.
+ * Without the extents a test can only assert properties the formula makes true by
+ * construction (`tx < 26.3`, `ty < 11.6`), which is how a raise that shrank every subject to
+ * 40% — both hands holding air — passed the whole suite.
  */
-const EXTENTS: Record<string, [number, number, number, number]> = {
+export const SUBJECT_EXTENTS: Record<string, [number, number, number, number]> = {
   default: [13, 12.6, 26, 23],
   audit: [13, 12.6, 26, 23],
   investigate: [12.2, 11.8, 27.4, 23],
@@ -248,7 +264,7 @@ const EXTENTS: Record<string, [number, number, number, number]> = {
 };
 
 export function raiseTransform(subject: string): string {
-  const [x0, y0, x1, y1] = EXTENTS[subject] ?? EXTENTS.default;
+  const [x0, y0, x1, y1] = SUBJECT_EXTENTS[subject] ?? SUBJECT_EXTENTS.default;
   const scale = Math.min(9 / (x1 - x0), 8.6 / (y1 - y0));
   const tx = 26.3 - scale * (x0 + x1) / 2;
   const ty = 11.6 - scale * y1;

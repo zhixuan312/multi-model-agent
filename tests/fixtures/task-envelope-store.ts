@@ -16,7 +16,6 @@ import type {
   AgentTier,
   Route,
   Finding,
-  EscalationEntry,
   ValidationWarning,
   ToolCallRecord,
   StructuredError,
@@ -63,18 +62,16 @@ export class TaskEnvelopeStore {
       status: 'running', terminalAt: null, stopReason: null, structuredError: null,
       errorCode: null,
       reviewPolicy: seed.reviewPolicy,
-      plannedStageTotal: 0,
       stages: [], toolCalls: [], filesWritten: [], realFilesChanged: [],
       commitSha: null, commitMessage: null, commitSkipReason: null,
       contextBlockId: null,
       totalCostUSD: 0, totalInputTokens: 0, totalOutputTokens: 0,
       totalCachedReadTokens: 0, totalCachedNonReadTokens: 0,
-      totalDurationMs: 0, turnsUsed: 0, stallCount: 0, sandboxViolationCount: 0, taskMaxIdleMs: 0,
-      findings: [], sourcesUsed: [], escalationLog: [], validationWarnings: [],
-      headline: { prefix: '', stageLabel: 'queued', stageIndex: 0, stageTotal: 0, toolWrites: 0, toolTotal: 0 },
+      totalDurationMs: 0, turnsUsed: 0, sandboxViolationCount: 0,
+      wasCancelled: false,
+      findings: [], sourcesUsed: [], validationWarnings: [],
     };
     store = new TaskEnvelopeStore(env, notify);
-    store.recomputeHeadline();
     return store;
   }
 
@@ -87,14 +84,6 @@ export class TaskEnvelopeStore {
     this.notify('setReviewPolicy');
   }
 
-  setPlannedStageTotal(n: number): void {
-    if (this.sealed) return;
-    if (this.env.plannedStageTotal === n) return;
-    this.env.plannedStageTotal = n;
-    this.recomputeHeadline();
-    this.notify('setPlannedStageTotal');
-  }
-
   startStage(name: StageName, init: { model: string; tier: AgentTier; startedAt?: string; round?: number }): void {
     this.guard('startStage');
     this.env.stages.push({
@@ -104,7 +93,6 @@ export class TaskEnvelopeStore {
       turnsUsed: 0, filesWrittenCount: 0,
       inputTokens: 0, outputTokens: 0, cachedReadTokens: null, cachedNonReadTokens: null,
     });
-    this.recomputeHeadline();
     this.notify('startStage');
   }
 
@@ -114,7 +102,6 @@ export class TaskEnvelopeStore {
     if (!stage) throw new Error(`completeStage: no started stage ${name}@${round}`);
     Object.assign(stage, result, { completedAt: new Date().toISOString() });
     this.recomputeTotals();
-    this.recomputeHeadline();
     this.notify('completeStage');
   }
 
@@ -131,26 +118,14 @@ export class TaskEnvelopeStore {
     for (const f of rec.filesWritten) if (!this.env.filesWritten.includes(f)) this.env.filesWritten.push(f);
     const last = this.env.stages[this.env.stages.length - 1];
     if (last) { last.filesWrittenCount = this.env.filesWritten.length; }
-    this.recomputeHeadline();
     this.notify('recordToolCall');
-  }
-
-  recordEscalation(entry: EscalationEntry): void {
-    this.guard('recordEscalation');
-    this.env.escalationLog.push(entry);
-    this.notify('recordEscalation');
-  }
-
-  recordStall(entry: { atMs: number; idleMs: number }): void {
-    this.guard('recordStall');
-    this.env.stallCount++;
-    if (entry.idleMs > this.env.taskMaxIdleMs) this.env.taskMaxIdleMs = entry.idleMs;
-    this.notify('recordStall');
   }
 
   recordSandboxViolation(_entry: { kind: string; path: string }): void {
     this.guard('recordSandboxViolation');
-    this.env.sandboxViolationCount++;
+    // `?? 0` because the count is nullable — null means "this runner cannot
+    // observe a refusal", and the first observed one makes it a real number.
+    this.env.sandboxViolationCount = (this.env.sandboxViolationCount ?? 0) + 1;
     this.notify('recordSandboxViolation');
   }
 
@@ -159,7 +134,6 @@ export class TaskEnvelopeStore {
   recordValidationWarning(w: ValidationWarning): void { this.guard('recordValidationWarning'); this.env.validationWarnings.push(w); this.notify('recordValidationWarning'); }
   recordHeartbeat(_state: { stallIdleMs: number }): void {
     if (this.sealed) return;
-    this.recomputeHeadline();
     this.notify('recordHeartbeat');
   }
 
@@ -176,7 +150,6 @@ export class TaskEnvelopeStore {
     this.env.commitSkipReason = terminal.commitSkipReason ?? null;
     this.env.contextBlockId = terminal.contextBlockId ?? null;
     this.recomputeTotals();
-    this.recomputeHeadline();
     this.sealed = true;
     this.notify('seal');
   }
@@ -198,15 +171,4 @@ export class TaskEnvelopeStore {
     this.env.totalDurationMs = dur; this.env.turnsUsed = turns;
   }
 
-  private recomputeHeadline(): void {
-    const lastStage = this.env.stages[this.env.stages.length - 1];
-    const ran = this.env.stages.filter(s => s.outcome !== 'skipped').length;
-    this.env.headline = {
-      prefix: '',
-      stageLabel: lastStage ? lastStage.name : 'queued',
-      stageIndex: ran,
-      stageTotal: Math.max(ran, this.env.plannedStageTotal),
-      toolWrites: this.env.filesWritten.length, toolTotal: this.env.toolCalls.length,
-    };
-  }
 }

@@ -54,8 +54,10 @@ function readWorkflowManifest(homeDir: string, commandName: string): string[] {
   }
 }
 
+/** Called only from `syncPackagedWorkflows`, and only on the branch where `files` is non-empty —
+ *  the empty case is handled there by REMOVING the manifest, which is why this carried a
+ *  `files.length === 0` early return that nothing could reach. */
 function writeWorkflowManifest(homeDir: string, commandName: string, files: string[]): void {
-  if (files.length === 0) return;
   fs.mkdirSync(workflowDirFor(homeDir), { recursive: true });
   fs.writeFileSync(
     workflowManifestPath(homeDir, commandName),

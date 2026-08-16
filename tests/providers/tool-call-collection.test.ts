@@ -6,7 +6,7 @@ it('records one CLAUDE entry per tool_use block, tagged with its assistant-event
     { type: 'assistant', message: { content: [{ type: 'tool_use', name: 'Read', input: {} }, { type: 'tool_use', name: 'Read', input: {} }] } },
     { type: 'assistant', message: { content: [{ type: 'tool_use', name: 'Edit', input: { file_path: '/secret/x.ts' } }] } },
     { type: 'result', subtype: 'success', usage: {} },
-  ] as never[], { durationMs: 1, costUSD: 0 });
+  ] as never[], { durationMs: 1 });
   expect(claude.toolCalls).toEqual([{ turn: 1, tool: 'Read' }, { turn: 1, tool: 'Read' }, { turn: 2, tool: 'Edit' }]);
 });
 

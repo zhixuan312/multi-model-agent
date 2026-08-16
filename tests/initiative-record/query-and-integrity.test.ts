@@ -11,10 +11,10 @@ describe('Initiative repository reads and integrity', () => {
     const dir = mkdtempSync(join(tmpdir(), 'mma-initiative-integrity-'));
     const store = InitiativeRecordStore.open({ dbPath: join(dir, 'initiatives.db') });
     try {
-      const p1 = store.execute({ operation: 'product_create', input: { name: 'One', slug: 'one' }, expected_revision: 0, provenance });
-      const p2 = store.execute({ operation: 'product_create', input: { name: 'Two', slug: 'two' }, expected_revision: 0, provenance });
-      const w2 = store.execute({ operation: 'workspace_create', input: { product_id: p2.uuid, name: 'W2', slug: 'w2', description: 'd' }, expected_revision: 0, provenance });
-      const initiative = store.execute({ operation: 'initiative_create', input: { product_id: p1.uuid, title: 'I', goal: 'g', status: 'open', outcome: null }, expected_revision: 0, provenance });
+      const p1 = store.execute({ operation: 'product_create', input: { name: 'One', slug: 'one' }, expected_revision: 0, provenance }) as { uuid: string };
+      const p2 = store.execute({ operation: 'product_create', input: { name: 'Two', slug: 'two' }, expected_revision: 0, provenance }) as { uuid: string };
+      const w2 = store.execute({ operation: 'workspace_create', input: { product_id: p2.uuid, name: 'W2', slug: 'w2', description: 'd' }, expected_revision: 0, provenance }) as { uuid: string };
+      const initiative = store.execute({ operation: 'initiative_create', input: { product_id: p1.uuid, title: 'I', goal: 'g', status: 'open', outcome: null }, expected_revision: 0, provenance }) as { uuid: string };
       const eventCount = store.listEvents({}).length;
       expect(() => store.execute({ operation: 'initiative_link_workspace', input: { initiative_id: initiative.uuid, workspace_id: w2.uuid, role: 'references' }, expected_revision: 0, provenance })).toThrow(/cross_product_workspace_link/);
       expect(store.listEvents({})).toHaveLength(eventCount);
@@ -25,17 +25,17 @@ describe('Initiative repository reads and integrity', () => {
     const dir = mkdtempSync(join(tmpdir(), 'mma-initiative-artifact-'));
     const store = InitiativeRecordStore.open({ dbPath: join(dir, 'initiatives.db') });
     try {
-      const product = store.execute({ operation: 'product_create', input: { name: 'MMA', slug: 'mma' }, expected_revision: 0, provenance });
-      const workspace = store.execute({ operation: 'workspace_create', input: { product_id: product.uuid, name: 'Engine', slug: 'engine', description: 'd' }, expected_revision: 0, provenance });
-      const resource = store.execute({ operation: 'resource_register', input: { workspace_id: workspace.uuid, type: 'git_repository', canonical_locator: 'repo', description: 'd' }, expected_revision: 0, provenance });
-      const initiative = store.execute({ operation: 'initiative_create', input: { product_id: product.uuid, title: 'I', goal: 'g', status: 'open', outcome: null }, expected_revision: 0, provenance });
+      const product = store.execute({ operation: 'product_create', input: { name: 'MMA', slug: 'mma' }, expected_revision: 0, provenance }) as { uuid: string };
+      const workspace = store.execute({ operation: 'workspace_create', input: { product_id: product.uuid, name: 'Engine', slug: 'engine', description: 'd' }, expected_revision: 0, provenance }) as { uuid: string };
+      const resource = store.execute({ operation: 'resource_register', input: { workspace_id: workspace.uuid, type: 'git_repository', canonical_locator: 'repo', description: 'd' }, expected_revision: 0, provenance }) as { uuid: string };
+      const initiative = store.execute({ operation: 'initiative_create', input: { product_id: product.uuid, title: 'I', goal: 'g', status: 'open', outcome: null }, expected_revision: 0, provenance }) as { uuid: string; human_key: string };
       expect(store.getInitiative({ uuid: initiative.uuid })).toEqual(store.getInitiative({ human_key: initiative.human_key }));
-      const related = store.execute({ operation: 'initiative_create', input: { product_id: product.uuid, title: 'Related', goal: 'g', status: 'open', outcome: null }, expected_revision: 0, provenance });
+      const related = store.execute({ operation: 'initiative_create', input: { product_id: product.uuid, title: 'Related', goal: 'g', status: 'open', outcome: null }, expected_revision: 0, provenance }) as { uuid: string };
       store.execute({ operation: 'initiative_link_workspace', input: { initiative_id: initiative.uuid, workspace_id: workspace.uuid, role: 'references' }, expected_revision: 0, provenance });
       store.execute({ operation: 'initiative_relate', input: { from_id: initiative.uuid, to_id: related.uuid, type: 'related_to' }, expected_revision: 0, provenance });
       store.execute({ operation: 'initiative_task_create', input: { initiative_id: initiative.uuid, title: 'Task', goal: 'g', status: 'open', outcome: null, workspace_ids: [workspace.uuid], resource_ids: [resource.uuid] }, expected_revision: 0, provenance });
-      const first = store.execute({ operation: 'artifact_register', input: { initiative_id: initiative.uuid, storage_mode: 'external', path_or_uri: '/a.md', content_hash: 'one', description: 'a' }, expected_revision: 0, provenance });
-      const second = store.execute({ operation: 'artifact_register', input: { initiative_id: initiative.uuid, storage_mode: 'external', path_or_uri: '/a.md', content_hash: 'two', description: 'a' }, expected_revision: first.revision, provenance });
+      const first = store.execute({ operation: 'artifact_register', input: { initiative_id: initiative.uuid, storage_mode: 'external', path_or_uri: '/a.md', content_hash: 'one', description: 'a' }, expected_revision: 0, provenance }) as { uuid: string; revision: number };
+      const second = store.execute({ operation: 'artifact_register', input: { initiative_id: initiative.uuid, storage_mode: 'external', path_or_uri: '/a.md', content_hash: 'two', description: 'a' }, expected_revision: first.revision, provenance }) as { uuid: string; revision: number };
       expect(second.uuid).toBe(first.uuid);
       expect(second.revision).toBe(first.revision + 1);
       const events = store.listEvents({});

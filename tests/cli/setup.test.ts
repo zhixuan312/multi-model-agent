@@ -11,6 +11,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { runSetup, SetupExitCode } from '../../packages/server/src/cli/setup.js';
+import type { ClientId } from '@zhixuan92/multi-model-agent-core';
 
 /** Answers are consumed in order; a question with no scripted answer returns ''
  *  (i.e. "accept the default"), which is what pressing Enter does. */
@@ -43,9 +44,9 @@ describe('contract: mma setup writes a usable config on a machine that had none'
       [true /* main oauth */, true /* complex oauth */, true /* standard oauth */, true /* provision claude-code */],
     );
     const code = await runSetup({
-      homeDir: home, configPath, skipProbe: true, detected: new Set(['claude-code' as never]),
+      homeDir: home, configPath, skipProbe: true, detected: new Set<ClientId>(['claude-code']),
       stdout: () => true, stderr: () => true, ask: s.ask, confirm: s.confirm,
-    } as never);
+    });
 
     expect(code).toBe(SetupExitCode.SUCCESS);
     const cfg = readConfig(configPath);
@@ -94,17 +95,17 @@ describe('contract: re-running setup is how you change things', () => {
       [true, true, true, true, true],
     );
     await runSetup({
-      homeDir: home, configPath, skipProbe: true, detected: new Set(['claude-code' as never]),
+      homeDir: home, configPath, skipProbe: true, detected: new Set<ClientId>(['claude-code']),
       stdout: () => true, stderr: () => true, ask: first.ask, confirm: first.confirm,
-    } as never);
+    });
     const before = readFileSync(configPath, 'utf8');
 
     // Every answer empty === pressing Enter at every prompt.
     const second = scripted([], []);
     const code = await runSetup({
-      homeDir: home, configPath, skipProbe: true, detected: new Set(['claude-code' as never]),
+      homeDir: home, configPath, skipProbe: true, detected: new Set<ClientId>(['claude-code']),
       stdout: () => true, stderr: () => true, ask: second.ask, confirm: second.confirm,
-    } as never);
+    });
 
     expect(code).toBe(SetupExitCode.SUCCESS);
     expect(readFileSync(configPath, 'utf8'), 'a no-op re-run must be a no-op').toBe(before);

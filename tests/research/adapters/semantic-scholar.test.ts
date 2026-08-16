@@ -93,22 +93,39 @@ describe('semanticScholarSearch', () => {
 
   // ---- maxResults clamping ----
 
+  // These three asserted `toBeLessThanOrEqual`, against a fixture carrying two results. "At most
+  // one" is satisfied by returning nothing, so a parse that broke entirely passed the cap tests;
+  // and "at most two" says nothing at all about a limit of 25, because two is everything the
+  // fixture has. The clamp is observable on the wire — the adapter puts it in `limit` — so the
+  // bound is asserted there and the count is asserted exactly.
+  function interceptCapturingUrl(body: string, sink: { url: string }) {
+    agent.get('https://api.semanticscholar.org').intercept({ path: /\/graph\/v1\/paper\/search/ })
+      .reply((opts) => { sink.url = String(opts.path); return { statusCode: 200, data: body, responseOptions: { headers: { 'content-type': 'application/json' } } }; });
+  }
+
   it('caps results to maxResults', async () => {
-    intercept200(fixtureJson);
+    const sink = { url: '' };
+    interceptCapturingUrl(fixtureJson, sink);
     const r = await semanticScholarSearch('q', { maxResults: 1, apiKey: 'test-key' });
-    expect(r.length).toBeLessThanOrEqual(1);
+    expect(sink.url).toContain('limit=1');
+    expect(r).toHaveLength(1);
   });
 
   it('clamps maxResults lower bound to 1', async () => {
-    intercept200(fixtureJson);
+    const sink = { url: '' };
+    interceptCapturingUrl(fixtureJson, sink);
     const r = await semanticScholarSearch('q', { maxResults: 0, apiKey: 'test-key' });
-    expect(r.length).toBeLessThanOrEqual(1);
+    expect(sink.url).toContain('limit=1');   // 0 must become 1, never 0
+    expect(r).toHaveLength(1);
   });
 
   it('clamps maxResults upper bound to 25', async () => {
-    intercept200(fixtureJson);
+    const sink = { url: '' };
+    interceptCapturingUrl(fixtureJson, sink);
     const r = await semanticScholarSearch('q', { maxResults: 100, apiKey: 'test-key' });
-    expect(r.length).toBeLessThanOrEqual(2);
+    // The bound is only visible on the request; the fixture has two results either way.
+    expect(sink.url).toContain('limit=25');
+    expect(r).toHaveLength(2);
   });
 
   it('defaults maxResults to 10 when not specified', async () => {

@@ -124,6 +124,36 @@ export async function assertRepoUntampered(cwd: string, baseline: RepoBaseline):
 }
 
 /**
+ * The `-c` overrides a commit needs, which is normally NONE.
+ *
+ * The engine used to hardcode `user.email=mma@localhost` / `user.name=mma worker` on every commit,
+ * which OVERRIDES the caller's own git identity — so work done in a user's repository, on the
+ * user's branch, was attributed to a fictional author they never configured. Authorship is the
+ * user's, not the engine's: the commit MESSAGE already carries the `[mma] <route>:` provenance, so
+ * nothing is hidden by letting `git` resolve identity the way every other tool in that checkout
+ * does (repo config, then global, then system).
+ *
+ * The override is kept ONLY as a fallback for the case that presumably motivated it: a checkout
+ * with no identity configured at all, where `git commit` fails outright with "Please tell me who
+ * you are". Losing a worker's finished edits to a missing `git config` would be a worse outcome
+ * than a placeholder author, so each field falls back independently.
+ */
+async function identityOverrides(cwd: string): Promise<string[]> {
+  const [email, name] = await Promise.all([
+    git(cwd, ['config', '--get', 'user.email']),
+    git(cwd, ['config', '--get', 'user.name']),
+  ]);
+  const overrides: string[] = [];
+  if (email.code !== 0 || email.stdout.trim().length === 0) {
+    overrides.push('-c', 'user.email=mma@localhost');
+  }
+  if (name.code !== 0 || name.stdout.trim().length === 0) {
+    overrides.push('-c', 'user.name=mma worker');
+  }
+  return overrides;
+}
+
+/**
  * Stage everything and commit on whatever branch the caller checked out.
  *
  * `git add -A` is intentional and specified: the branch belongs to this task, so pre-existing
@@ -133,6 +163,8 @@ export async function assertRepoUntampered(cwd: string, baseline: RepoBaseline):
  *
  * A commit failure must never destroy work: we never reset, checkout, or clean. Edits stay on
  * disk for `git status` and manual recovery, and the error propagates.
+ *
+ * Authorship is the CALLER's own git identity — see {@link identityOverrides}.
  */
 export async function commitAll(cwd: string, baseline: RepoBaseline, message: string): Promise<CommitOutcome> {
   if (baseline.head === null) return { committed: false, head: null, filesChanged: [] };
@@ -160,8 +192,7 @@ export async function commitAll(cwd: string, baseline: RepoBaseline, message: st
   }
 
   const commit = await git(cwd, [
-    '-c', 'user.email=mma@localhost',
-    '-c', 'user.name=mma worker',
+    ...(await identityOverrides(cwd)),
     'commit', '--no-verify', '--no-gpg-sign', '-m', message,
   ]);
 

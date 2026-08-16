@@ -186,22 +186,30 @@ describe('route contract', () => {
   // ── Structured 202 polling ──
 
   describe('GET /execution/:executionId polling (202)', () => {
+    /**
+     * Driven by a HANGING provider, and the 202 is asserted rather than assumed.
+     *
+     * This booted `stage: 'ok'` and wrapped every assertion in `if (poll.status === 202)`. The
+     * mock finishes before the first poll lands, so the poll returned 200 and the body of the
+     * test never ran — measured, not inferred. The case named six fields of the running
+     * snapshot and checked none of them.
+     */
     it('returns structured JSON with executionId, status, phase, elapsedMs, phaseElapsedMs, startedAt', async () => {
-      const h = await boot({ provider: mockProvider({ stage: 'ok' }), cwd: process.cwd() });
+      const h = await boot({ provider: mockProvider({ stage: 'hang' }), cwd: process.cwd() });
       try {
         const res = await dispatch(h, { type: 'review', target: { paths: ['/tmp/a.ts'] } });
         const { executionId } = (await res.json()) as { executionId: string };
         const poll = await poll202(h, executionId);
-        if (poll.status === 202) {
-          expect(poll.contentType).toContain('application/json');
-          const b = poll.body as Record<string, unknown>;
-          expect(b.executionId).toBe(executionId);
-          expect(b.status).toBe('running');
-          expect(b.phase).toBeTypeOf('string');
-          expect(b.elapsedMs).toBeTypeOf('number');
-          expect(b.phaseElapsedMs).toBeTypeOf('number');
-          expect(b.startedAt).toBeTypeOf('string');
-        }
+
+        expect(poll.status, 'a hanging provider must still be running when polled').toBe(202);
+        expect(poll.contentType).toContain('application/json');
+        const b = poll.body as Record<string, unknown>;
+        expect(b.executionId).toBe(executionId);
+        expect(b.status).toBe('running');
+        expect(b.phase).toBeTypeOf('string');
+        expect(b.elapsedMs).toBeTypeOf('number');
+        expect(b.phaseElapsedMs).toBeTypeOf('number');
+        expect(b.startedAt).toBeTypeOf('string');
       } finally { await h.close(); }
     });
   });
@@ -393,36 +401,44 @@ describe('route contract', () => {
   // ── Input validation ──
 
   describe('input validation', () => {
-    it('rejects deprecated question field with 400', async () => {
+    /**
+     * Each of these supplies EVERY required field for its type, so the only thing left to
+     * reject is the retired one.
+     *
+     * They previously sent the retired field alone — `{ type: 'investigate', question: 'test' }`
+     * with no `prompt` — which a 400 answers for the missing required field whether or not the
+     * schema is strict. Five cases named for rejecting retired fields, all five passing on a
+     * request that was invalid for an unrelated reason: if `taskInputSchema` ever stopped being
+     * strict, every one of them would still be green.
+     */
+    const RETIRED_FIELD_CASES: Array<{ label: string; body: Record<string, unknown>; field: string }> = [
+      { label: 'question (investigate)', field: 'question', body: { type: 'investigate', prompt: 'what is going on', question: 'test' } },
+      { label: 'errorMessage (debug)', field: 'errorMessage', body: { type: 'debug', prompt: 'why does it fail', errorMessage: 'test' } },
+      { label: 'filePaths (audit)', field: 'filePaths', body: { type: 'audit', target: { inline: 'doc' }, filePaths: ['a.md'] } },
+      { label: 'taskDescriptors (execute_plan)', field: 'taskDescriptors', body: { type: 'execute_plan', target: { paths: ['p.md'] }, tasks: [], taskDescriptors: ['1'] } },
+      { label: 'tasks array (delegate)', field: 'tasks', body: { type: 'delegate', prompt: 'do the thing', tasks: [{ prompt: 'x' }] } },
+    ];
+
+    it.each(RETIRED_FIELD_CASES)('rejects the retired $label on an otherwise VALID request', async ({ body, field }) => {
       const h = await boot({ provider: mockProvider({ stage: 'ok' }), cwd: process.cwd() });
       try {
-        const res = await dispatch(h, { type: 'investigate', question: 'test' });
+        const res = await dispatch(h, body);
         expect(res.status).toBe(400);
+        // ...and names it, so the 400 cannot be coming from something else in the body.
+        expect(JSON.stringify(await res.json())).toContain(field);
       } finally { await h.close(); }
     });
 
-    it('rejects deprecated errorMessage field with 400', async () => {
-      const h = await boot({ provider: mockProvider({ stage: 'ok' }), cwd: process.cwd() });
+    it.each(RETIRED_FIELD_CASES)('...and accepts the same request once $label is removed', async ({ body, field }) => {
+      // The control: proves the body is otherwise complete, so the rejection above is
+      // attributable to the retired key and to nothing else.
+      const { [field]: _retired, ...clean } = body;
+      const tmp = await mkdtemp(join(tmpdir(), 'mma-retired-field-'));
+      const h = await boot({ provider: mockProvider({ stage: 'ok' }), cwd: tmp });
       try {
-        const res = await dispatch(h, { type: 'debug', errorMessage: 'test' });
-        expect(res.status).toBe(400);
-      } finally { await h.close(); }
-    });
-
-    it('rejects deprecated filePaths field with 400', async () => {
-      const h = await boot({ provider: mockProvider({ stage: 'ok' }), cwd: process.cwd() });
-      try {
-        const res = await dispatch(h, { type: 'audit', filePaths: ['a.md'] });
-        expect(res.status).toBe(400);
-      } finally { await h.close(); }
-    });
-
-    it('rejects deprecated taskDescriptors field with 400', async () => {
-      const h = await boot({ provider: mockProvider({ stage: 'ok' }), cwd: process.cwd() });
-      try {
-        const res = await dispatch(h, { type: 'execute_plan', filePaths: ['p.md'], taskDescriptors: ['1'] });
-        expect(res.status).toBe(400);
-      } finally { await h.close(); }
+        const res = await dispatchCwd(h, tmp, clean);
+        expect(res.status, `${field} removed should leave a valid request`).toBe(202);
+      } finally { await h.close(); await rm(tmp, { recursive: true, force: true }); }
     });
 
     it('rejects unknown task type with 400', async () => {
@@ -430,6 +446,8 @@ describe('route contract', () => {
       try {
         const res = await dispatch(h, { type: 'bogus', prompt: 'test' });
         expect(res.status).toBe(400);
+        // Names the discriminator, so this cannot pass on an unrelated validation failure.
+        expect(JSON.stringify(await res.json())).toContain('type');
       } finally { await h.close(); }
     });
 
@@ -449,13 +467,6 @@ describe('route contract', () => {
       } finally { await h.close(); await rm(tmp, { recursive: true, force: true }); }
     });
 
-    it('rejects old delegate tasks array with 400', async () => {
-      const h = await boot({ provider: mockProvider({ stage: 'ok' }), cwd: process.cwd() });
-      try {
-        const res = await dispatch(h, { type: 'delegate', tasks: [{ prompt: 'x' }] });
-        expect(res.status).toBe(400);
-      } finally { await h.close(); }
-    });
   });
 
   // ── Unknown executionId ──
@@ -614,6 +625,7 @@ describe('route contract', () => {
           deliverable: { state: 'draft', audience: 'board' },
         });
         expect(res.status).toBe(400);
+        expect(JSON.stringify(await res.json())).toContain('deliverable');
       } finally { await h.close(); }
     });
   });

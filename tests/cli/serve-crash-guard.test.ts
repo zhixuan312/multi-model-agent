@@ -3,9 +3,19 @@ import { mkdtempSync, writeFileSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { startServe } from '../../packages/server/src/cli/serve.js';
+import { multiModelConfigSchema, type MultiModelConfig } from '@zhixuan92/multi-model-agent-core';
 
-function minimalConfig(tokenFile: string) {
-  return {
+/**
+ * A config the daemon would ACTUALLY accept — parsed through the real schema rather than
+ * hand-assembled and cast.
+ *
+ * The literal below was passed with `as any`, which hid that it is not a valid config at all: the
+ * schema requires a `research` block (it has a default, so the parsed type carries it even though
+ * the input may omit it). Parsing here fills the defaults from the one authoritative source and
+ * fails loudly if this fixture ever stops being a real config.
+ */
+function minimalConfig(tokenFile: string): MultiModelConfig {
+  return multiModelConfigSchema.parse({
     agents: {
       standard: { type: 'codex' as const, model: 'm', baseUrl: 'http://127.0.0.1:1/v1', apiKeyEnv: 'FAKE' },
       complex: { type: 'codex' as const, model: 'm', baseUrl: 'http://127.0.0.1:1/v1', apiKeyEnv: 'FAKE' },
@@ -27,17 +37,13 @@ function minimalConfig(tokenFile: string) {
       stateDir: mkdtempSync(join(tmpdir(), 'mma-test-state-')),
     },
     diagnostics: { log: false },
-  };
+  });
 }
 
 class FakeExit extends Error {
   constructor(public code: number) {
     super(`exit(${code})`);
   }
-}
-
-function fakeExit(code: number): never {
-  throw new FakeExit(code);
 }
 
 function emitExitSafe(emitter: NodeJS.EventEmitter, event: string, ...args: unknown[]): void {
@@ -77,7 +83,7 @@ describe('serve crash-guard (Bug 7)', () => {
     const stdoutErrBefore = process.stdout.listenerCount('error');
 
     const exitCalls: number[] = [];
-    const handle = await startServe(minimalConfig(tokenFile) as any, (code) => {
+    const handle = await startServe(minimalConfig(tokenFile), (code) => {
       exitCalls.push(code);
       throw new FakeExit(code);
     });
@@ -113,7 +119,7 @@ describe('serve crash-guard (Bug 7)', () => {
     const unhandledBefore = process.listenerCount('unhandledRejection');
 
     const exitCalls: number[] = [];
-    const handle = await startServe(minimalConfig(tokenFile) as any, (code) => {
+    const handle = await startServe(minimalConfig(tokenFile), (code) => {
       exitCalls.push(code);
       throw new FakeExit(code);
     });

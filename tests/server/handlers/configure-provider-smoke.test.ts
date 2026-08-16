@@ -4,18 +4,8 @@ import type { Server } from 'node:http';
 import { boot } from '../../contract/fixtures/harness.js';
 import { mockProvider } from '../../contract/fixtures/mock-providers.js';
 
-// configure-provider verifies a codex tier by REALLY spawning `codex --version`
-// (codexBinaryAvailable() in the handler), so without this these tests pass or fail
-// according to whether the machine happens to have codex on PATH — and they fail
-// confusingly, on `body.probe` being undefined, because an unverified request never
-// reaches the probe. Point the resolution at the Node binary: it always exists and
-// `node --version` exits 0.
-//
-// Deliberately scoped to this file rather than a global setupFiles hook. A global
-// override also reaches tests that drive a real CodexCliSession, which writes an
-// instruction to the spawned process stdin — against a process that is not codex that
-// write EPIPEs, failing the run (intermittently) even when every test passes.
-process.env.MMA_CODEX_BIN ??= process.execPath;
+// Spawn-free codex verification for this file — see the module for why it is per-file.
+import '../../helpers/stub-codex-binary.js';
 
 
 let mockApi: Server;

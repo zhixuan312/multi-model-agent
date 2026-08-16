@@ -1,6 +1,6 @@
 # Privacy & Telemetry Policy
 
-**Schema version: 6** · **Last revised:** 2026-06-15 — 5.4.2 (wire-record honesty pass: `verifyCommandPresent` + `validationsRun` removed, `reviewPolicy` reframed as per-task intent, `errorCode` preserved through seal)
+**Schema version: 7** · **Last revised:** 2026-08-16 — 6.10.0 (findings restored to the wire: `findingsBySeverity`, `concernCount`, `concernCategories`, `sandboxViolationCount`, and graded `terminalStatus`/`workerStatus`. Counts and categories only — never a finding's text, file, or line.)
 
 multi-model-agent collects anonymous operational measurements to help improve the product. This page documents every field that crosses the wire, every field we refuse to collect, and how to opt out.
 
@@ -171,7 +171,7 @@ Stage-type-specific extras:
 
 | Field | Type |
 |-------|------|
-| `schemaVersion` | integer literal `6` (was `5` pre-5.4.2). mma is forward-only on the new vocabulary; the backend normalises legacy v4/v5 records on read. |
+| `schemaVersion` | integer literal `7` (was `6` pre-6.10.0, `5` pre-5.4.2). mma is forward-only on the new vocabulary; the backend normalises legacy v4/v5/v6 records on read. |
 | `installId` | UUIDv4 — pseudonymous, generated locally, rotates every 365 days |
 | `mmaVersion` | SemVer string |
 | `os` | enum: `darwin`, `linux`, `win32`, `other` |
@@ -240,7 +240,7 @@ Delete the `.mma/` directory at any time to wipe local context blocks.
 
 ## How to opt out
 
-Telemetry is **disabled by default**. Run `mma telemetry enable` to opt in — this writes both `telemetry.enabled = true` and `telemetryConsent.schemaVersion = 6` atomically. To opt out:
+Telemetry is **disabled by default**. Run `mma telemetry enable` to opt in — this writes `telemetry.enabled = true` and nothing else. It does NOT record a consent schema version; `cli/telemetry.ts` explicitly DELETES any legacy `consentSchemaVersion` key it finds. Opt-in is a stored flag with no schema binding in code, which is the same point the 2026-08-08 row below makes — this paragraph had continued to describe a binding that does not exist. To opt out:
 
 ```bash
 # Option 1: CLI (immediate)
@@ -272,6 +272,7 @@ To reset your pseudonymous identifier without disabling telemetry: `mma telemetr
 
 | Date | Schema | Change |
 |---|---|---|
+| 2026-08-16 | 7 | **Findings return to the wire (6.10.0).** `findingsBySeverity`, `concernCount`, `concernCategories` and `sandboxViolationCount` are emitted again, and `terminalStatus`/`workerStatus` carry graded outcomes. These had silently stopped being populated at 5.4.x, so a zero meant "not instrumented" rather than "clean" — the rule now is **null when unmeasurable, never 0**. Still counts and category labels only: no finding text, no file path, no line number, no code. Schema bumped to 7 because the vocabulary changed, not merely the volume. |
 | 2026-08-08 | 6 | Semantic change within v6 (6.6.0 release), no new fields and no new content. `mainModel` — and therefore `mainModelFamily`, `mainCostUSD` (top-level and per stage) and `costDeltaVsMainUSD` — is now read from the daemon's configured `agents.main.model`. Before 6.6.0 it came from a per-call claim (`mma_run`'s `mainModel` parameter or the `X-MMA-Main-Model` header), and when the caller sent none, mma fell back to the implementer tier's own model. That fallback priced a run against one of the workers that had just executed it, so `main_cost_usd` and `total_delta_usd` mixed two incomparable measurements and could report a negative saving for a run that saved money. `agents.main` is now a required config tier, so records from 6.6.0 onward always carry a `mainModel`, and it is never a worker tier. Existing rows are unchanged; consumers that compare across the boundary should treat pre-6.6.0 and post-6.6.0 `main_cost_usd` as different measurements. |
 | 2026-08-08 | 6 | Additive within v6 (6.3.0 release). New top-level `toolCalls` array (0–500 entries) of `{ stage, turn, tool, count }`. **This is a change in kind, not only in volume: individual tool names return to the wire**, having been removed as `topToolNames` in the 2026-04-29 V3 pass. Names only — no arguments, paths, commands, or outputs; the runner projects each call to `(stage, turn, tool)` before it reaches the wire. No schema version bump: the field is additive and optional, and bumping would silently drop queued v6 records at `flusher.ts` the way a v5 bump would have. **Consent was not re-requested**, because opt-in is a stored flag with no schema binding in code; README.md previously claimed opt-ins are cleared on major schema upgrades, which described an intention rather than a mechanism and has been corrected. Anyone who opted in before 6.3.0 and does not want tool names included should run `mma telemetry disable`. |
 | 2026-05-18 | 5 | Wire-record honesty pass (4.7.7 release). **Removed:** `verifyCommandPresent` (boolean) — the verify-command feature was deleted end-to-end, so the adoption signal is no longer collected; backend column `verify_command_present` remains nullable and accepts null for new records (no migration required). **Removed:** `validationsRun` byproduct field — inert plumbing that carried no signal. **Semantic redefinition** of `reviewPolicy` — same enum (`full` / `quality_only` / `diff_only` / `none`) but now sourced from per-task `TaskEnvelope.reviewPolicy` populated at envelope construction from the caller's per-task intent, no longer a server default. The wire `review_policy` column is now complementary to `stages.review.outcome` — intent vs what actually ran. An intent=`full` + outcome=`skipped` row is now a legitimate queryable signal rather than the apparent contradiction it used to be. **New invariant** on `errorCode`: the field was always nullable on the wire schema, but `recordTaskCompletedHandler` now preserves `errorCode` through seal so reviewer-rejection rows land `review_quality_findings_unresolved` or `review_spec_rejected_terminal` instead of `null`; previously `terminal_status=error + error_code=null` was indistinguishable from a transport failure. No new content collected; no schema version bump (bumping would silently drop queued v5 records via `flusher.ts:143`). |

@@ -102,14 +102,14 @@ Anti-pattern alert: **`inline-labor-leakage`** (AP2). If you find yourself readi
 ❌ **Asking for a fix instead of an answer**
 > prompt: "Refactor the auth middleware to use JWT"
 
-The investigator can't write — `tools: 'readonly'`. **Fix:** use `mma-delegate` for research-then-edit, or split: investigate first, then dispatch the edit.
+The investigator can't write — the route is registered `sandbox: 'read-only'`, so the engine denies every write tool (there is no `tools` request field). **Fix:** use `mma-delegate` for research-then-edit, or split: investigate first, then dispatch the edit.
 
 ❌ **Inline-reading instead of delegating**
 About to `Read` 3+ files just to answer one question? That's the wrong tradeoff — the worker reads on its cheap budget; you read its synthesis on yours.
 
 ## Terminal context block
 
-Every completed **read-route** task (audit / review / debug / investigate / research) auto-registers a reusable terminal context block containing its report (headline + findings). The block id is returned on the result as **`contextBlockId`**. Write routes (delegate / execute-plan) return `contextBlockId: null` — their record is the commit, not a block. This block is immutable, lives for the session duration, and counts against the project's `maxEntries` quota (default 500).
+Every completed **read-only** task — audit / review / debug / investigate / research / **journal_recall** — auto-registers a reusable terminal context block containing its report (headline + findings). The block id is returned on the result as **`contextBlockId`**. Every other type returns `contextBlockId: null` — including `spec` and `plan`, which read rather than write but are `cwd-only` because they write their document — their record is the commit, not a block. This block is immutable, lives for the session duration, and counts against the project's `server.limits.maxContextBlocksPerProject` quota (default 500).
 
 Use it for delta follow-ups — feed prior results' block ids into a later call's `contextBlockIds`, filtering out nulls:
 

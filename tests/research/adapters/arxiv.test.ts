@@ -22,7 +22,10 @@ describe('arxivSearch', () => {
     });
   });
 
-  it('returns [] on unexpected redirect', async () => {
+  // Named for what it asserts. It used to be called "returns [] on unexpected redirect" while
+  // asserting the opposite — the adapter REJECTS, and a caller who believed the name would have
+  // written `const r = await arxivSearch(...)` with no catch.
+  it('rejects on an unexpected redirect rather than following it', async () => {
     agent.get('https://export.arxiv.org').intercept({ path: /\/api\/query/ })
       .reply(302, '', { headers: { location: 'https://other.com' } });
     await expect(arxivSearch('q')).rejects.toThrow(/adapter_unexpected_redirect/);
@@ -33,7 +36,10 @@ describe('arxivSearch', () => {
     agent.get('https://export.arxiv.org').intercept({ path: /\/api\/query/ })
       .reply(200, xml, { headers: { 'content-type': 'application/atom+xml' } });
     const r = await arxivSearch('q', { maxResults: 1 });
-    expect(r.length).toBeLessThanOrEqual(1);
+    // Exactly one, not "at most one". The fixture carries three entries, so `toBeLessThanOrEqual`
+    // was also satisfied by a parse that returned nothing at all — the cap and a total failure
+    // were indistinguishable.
+    expect(r).toHaveLength(1);
   });
 });
 

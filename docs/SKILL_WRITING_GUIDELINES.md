@@ -179,7 +179,7 @@ The exact `mma_run` tool-call JSON, copy-pasteable.
 | `version` | `"0.0.0-unreleased"` in source; build-injected to package version in `dist/` |
 | Body length | ≤200 lines |
 | `@include _shared/*.md` | every reference must resolve |
-| Dispatch surface | no `curl`, `POST /task`, `GET /task/`, bearer-header construction, or port discovery; must mention `mma clients` as the no-MCP fallback |
+| Dispatch surface | no `curl`, no raw HTTP dispatch (`POST /execution`, `GET /execution/`, and the retired `POST /task` / `GET /task/` spellings alike), no bearer-header construction, no port discovery; must mention `mma clients` as the no-MCP fallback |
 
 ## When to violate these guidelines
 

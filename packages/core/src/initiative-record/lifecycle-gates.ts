@@ -198,11 +198,14 @@ function isEstablishmentSatisfied(
 export function evaluateLifecycleGate(input: EvaluateLifecycleGateInput): GateStatus {
   const { contract, phase, requirements, acceptanceCriteria, decisions, events, deliverableValidationStates } = input;
   if (!contract) {
-    return { status: 'green', missing: [], note: 'No lifecycle contract is set.' };
+    return { status: 'green', missing: [], establishments: [], note: 'No lifecycle contract is set.' };
   }
   const required = contract.phases[phase]?.required ?? [];
-  const missing: GateEstablishmentResult[] = [];
-  for (const establishment of required) {
+  // FR-8 asks for a result for EACH required Establishment, not only the failing ones. Reporting
+  // just `missing` left a caller unable to tell "checked and satisfied" from "not in this contract
+  // at all" — the deliver gate lists only `delivery_confirmed` when `deliverables_valid` is
+  // present and vacuously satisfied, which reads exactly like the establishment is absent.
+  const establishments: GateEstablishmentResult[] = required.map((establishment) => {
     const satisfied = isEstablishmentSatisfied(
       establishment,
       phase,
@@ -213,9 +216,10 @@ export function evaluateLifecycleGate(input: EvaluateLifecycleGateInput): GateSt
       events,
       deliverableValidationStates,
     );
-    if (!satisfied) {
-      missing.push({ establishment, satisfied: false, detail: detailFor(establishment) });
-    }
-  }
-  return missing.length === 0 ? { status: 'green', missing: [] } : { status: 'red', missing };
+    return { establishment, satisfied, detail: detailFor(establishment) };
+  });
+  const missing = establishments.filter((result) => !result.satisfied);
+  return missing.length === 0
+    ? { status: 'green', missing: [], establishments }
+    : { status: 'red', missing, establishments };
 }

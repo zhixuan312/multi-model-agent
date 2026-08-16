@@ -1,20 +1,48 @@
 import { z } from 'zod';
 import { ModelFamilyEnum } from '../config/model-profile-registry.js';
 
-export const SCHEMA_VERSION = 6;
+/**
+ * v7 (6.10.0) — the honesty pass.
+ *
+ * v6 carried nine fields no component could produce: every one of them arrived
+ * as a hardcoded 0 on every event since 4.8.0, when the lifecycle layer that
+ * once measured them was deleted. A dashboard cannot tell a measured zero from
+ * an unmeasured one, so those columns read as good news — "no stalls, no
+ * sandbox violations, no escalations" — when the truth was "nobody looked".
+ * They are gone rather than fixed, except `sandboxViolationCount`, which is now
+ * really measured (and nullable where it cannot be).
+ *
+ * Removed: stallCount, taskMaxIdleMs, escalationCount, fallbackCount, subtype,
+ * roundsUsed, outcomeInferred, outcomeMalformed, per-stage maxIdleMs/totalIdleMs,
+ * and the rework/annotating/committing stage variants.
+ * Changed: concernCategories is free text; sandboxViolationCount is nullable;
+ * terminalStatus gained `cancelled` and now distinguishes timeout/unavailable.
+ */
+export const SCHEMA_VERSION = 7;
 
 export const STRICT_ID_REGEX = /^[A-Za-z0-9][-A-Za-z0-9_.:+/@]{0,119}$/;
+
+/**
+ * Bounds the FINDINGS PRODUCER must respect, exported so it can respect them by reference.
+ *
+ * These are the wire's limits, and a producer that exceeds one does not get a rejected field — the
+ * whole event fails schema parse and the uploader drops it, silently. That is the defect class the
+ * 6.10.0 audit found three instances of. `reviewer-findings.ts` clamps to exactly these numbers;
+ * before they were exported it clamped to its own copies of them, so tightening a bound here would
+ * have re-introduced the silent drop with every test still green.
+ */
+export const CONCERN_CATEGORY_MAX_LEN = 64;
+export const CONCERN_CATEGORIES_MAX = 16;
+export const CONCERN_COUNT_MAX = 150;
 
 // ── Enums shared across stages and top-level ─────────────────────────────
 //
 // ConcernCategory lives at `types/enums.ts` per architecture.md:209;
 // re-exported here so callers can pull it from the wire-schema module
-// alongside the wire event types it is used in.
+// alongside the wire event types it is used in. The wire itself no longer
+// validates against it — concernCategories carries the reviewer's own words.
 
 export { ConcernCategory } from '../types/enums.js';
-// We need a direct local binding for `z.array(_ConcernCategory)` below; the
-// re-export above is the public path, the local import is the internal one.
-import { ConcernCategory as _ConcernCategory } from '../types/enums.js';
 
 import { ErrorCodeSchema } from '../error-codes.js';
 export const ErrorCode = ErrorCodeSchema;
@@ -26,8 +54,10 @@ export const FindingsBySeveritySchema = z.object({
   low: z.number().int().min(0).max(200),
 }).strict();
 
-// Shared base: matches the TokenUsage interface in runners/types.ts.
-// Single source of truth for canonical 4-field token shape.
+// Shared base: matches the `TokenUsage` interface in `types/run-result.ts`, whose docstring
+// carries the disjoint-partition contract every provider adapter normalizes to. (This said
+// `runners/types.ts` — a path that does not exist in this layout and has not since the
+// providers/ split.)
 export const TokenUsageSchema = z.object({
   inputTokens: z.number().int().min(0),
   outputTokens: z.number().int().min(0),
@@ -42,13 +72,10 @@ export const TierUsageSchema = TokenUsageSchema.extend({
 
 // ── Stage entry (§3.3) ───────────────────────────────────────────────────
 
-const StageNameEnum = z.enum([
-  'implementing',
-  'review',
-  'rework',
-  'annotating',
-  'committing',
-]);
+// The two stages the two-phase pipeline runs. `rework`, `annotating` and
+// `committing` were also permitted; their producer was the lifecycle layer and
+// went with it, so no event has carried one since 4.8.0.
+const StageNameEnum = z.enum(['implementing', 'review']);
 
 // Base fields shared by all stage variants.
 // Field set kept in lockstep with TokenUsageSchema — when a new token class
@@ -66,8 +93,6 @@ export const StageEntryBase = z.object({
   cachedNonReadTokens: z.number().int().min(0).max(100_000_000).nullable(),
   filesWrittenCount: z.number().int().min(0).max(5000),
   turnCount: z.number().int().min(0).max(250),
-  maxIdleMs: z.number().int().min(0).max(1_200_000),
-  totalIdleMs: z.number().int().min(0).max(3_600_000),
   mainCostUSD: z.number().nullable(),   // what this stage's tokens would have cost at the main model's rate (renamed from mainEquivalentCostUSD in 4.7.6 to match DB column main_cost_usd)
 });
 
@@ -80,25 +105,12 @@ export const StageEntryBase = z.object({
 export const ReviewStageEntrySchema = StageEntryBase.extend({
   name: z.literal('review'),
   verdict: z.enum(['approved', 'concerns', 'changes_required', 'error', 'skipped', 'annotated', 'not_applicable']),
-  roundsUsed: z.number().int().min(1).max(10),
-  concernCategories: z.array(_ConcernCategory).max(9),
-}).strict();
-
-export const ReworkStageEntrySchema = StageEntryBase.extend({
-  name: z.literal('rework'),
-  triggeringConcernCategories: z.array(_ConcernCategory).max(9),
-}).strict();
-
-export const AnnotatingStageEntrySchema = StageEntryBase.extend({
-  name: z.literal('annotating'),
-  outcome: z.enum(['passed', 'failed', 'skipped', 'not_applicable', 'transformed']),
-  skipReason: z.enum(['no_command', 'not_applicable', 'other']).nullable(),
-}).strict();
-
-export const CommitStageEntrySchema = StageEntryBase.extend({
-  name: z.literal('committing'),
-  filesCommittedCount: z.number().int().min(0).max(1000),
-  branchCreated: z.boolean(),
+  // The reviewer's own words, not a closed enum. Validating against the 14-value
+  // ConcernCategory flattened everything else to `other`, throwing the signal
+  // away at the point it became specific — and a downstream store that rejects
+  // an engine vocabulary it has not seen drops whole events (the `agentType:
+  // 'main'` incident). Bounded in length and count, not in content.
+  concernCategories: z.array(z.string().min(1).max(CONCERN_CATEGORY_MAX_LEN)).max(CONCERN_CATEGORIES_MAX),
 }).strict();
 
 export const ImplementStageEntrySchema = StageEntryBase.extend({
@@ -108,9 +120,6 @@ export const ImplementStageEntrySchema = StageEntryBase.extend({
 export const StageEntrySchema = z.discriminatedUnion('name', [
   ImplementStageEntrySchema,
   ReviewStageEntrySchema,
-  ReworkStageEntrySchema,
-  AnnotatingStageEntrySchema,
-  CommitStageEntrySchema,
 ]);
 
 // ── Task completed event (§3.2) ──────────────────────────────────────────
@@ -119,7 +128,6 @@ export const TaskCompletedEventSchema = z.object({
   // Identity
   eventId: z.string().uuid(),
   route: z.enum(['delegate', 'audit', 'review', 'debug', 'execute-plan', 'investigate', 'research', 'journal-record', 'journal-recall', 'register-context-block', 'orchestrate', 'spec', 'plan']),
-  subtype: z.string().min(1).max(64).nullable().optional(),
   client: z.string().regex(STRICT_ID_REGEX),
 
   // Configuration
@@ -138,20 +146,38 @@ export const TaskCompletedEventSchema = z.object({
   mainModel: z.string().nullable(),
   mainModelFamily: ModelFamilyEnum,
 
-  // Tier-level usage breakdown (§3.2, §3.3)
+  // Tier-level usage breakdown (§3.2, §3.3).
+  //
+  // `main` was missing while `agentType` above has always allowed it and `orchestrate` runs on
+  // that tier by default. Zod strips unknown keys, so `toWireRecord`'s own
+  // `ValidatedTaskCompletedEventSchema.parse()` silently DELETED the main bucket the projection
+  // had just built — every main-tier run reported `agentType: 'main'` with no usage under it.
+  // The telemetry backend types `tierUsage` as an open record, so carrying the key costs it
+  // nothing and its typed slot extraction simply ignores what it does not read.
   tierUsage: z.object({
     standard: TierUsageSchema.optional(),
     complex: TierUsageSchema.optional(),
+    main: TierUsageSchema.optional(),
   }),
 
   // Outcome
-  terminalStatus: z.enum(['ok', 'incomplete', 'timeout', 'error', 'brief_too_vague', 'unavailable']),
-  workerStatus: z.enum(['done', 'done_with_concerns', 'needs_context', 'blocked', 'failed', 'review_loop_capped']),
-  // errorCode is non-null whenever terminalStatus === 'error'.
-  // For reviewer-rejection paths, the code is one of:
-  //   review_diff_rejected, review_quality_findings_unresolved, review_spec_rejected_terminal.
-  // terminalStatus remains 'error' (no distinct 'review_rejected' status).
-  // Disambiguate reviewer rejection from transport/runtime failure by reading errorCode.
+  // `incomplete`, `brief_too_vague`, `needs_context`, `blocked` and
+  // `review_loop_capped` were also permitted and nothing produced any of them —
+  // retired lifecycle vocabulary. What IS produced: ok, error, and now
+  // `timeout` (the run hit its wall clock), `unavailable` (the provider could
+  // not be reached or authenticated — an infrastructure fact, not a task
+  // outcome) and `cancelled` (the caller aborted it). Reporting all three as a
+  // flat `error` is what made the failure rate unreadable: a run the user
+  // cancelled counted against the engine exactly like a crash.
+  terminalStatus: z.enum(['ok', 'timeout', 'error', 'unavailable', 'cancelled']),
+  workerStatus: z.enum(['done', 'done_with_concerns', 'failed', 'cancelled']),
+  // errorCode is non-null whenever terminalStatus === 'error'; `error-codes.ts` is the closed
+  // vocabulary and anything outside it coerces to `other`.
+  //
+  // This used to name `review_diff_rejected`, `review_quality_findings_unresolved` and
+  // `review_spec_rejected_terminal` as the reviewer-rejection codes. None of the three is in
+  // `ErrorCodeSchema`, and nothing emits them — they are the removed lifecycle layer's
+  // vocabulary, so the note described a distinction the wire could not carry.
   errorCode: ErrorCode.nullable(),
 
   // Token economics
@@ -167,7 +193,7 @@ export const TaskCompletedEventSchema = z.object({
   costDeltaVsMainUSD: z.number().nullable(),
 
   // Lifecycle counts
-  concernCount: z.number().int().min(0).max(150),
+  concernCount: z.number().int().min(0).max(CONCERN_COUNT_MAX),
   // 4.7.4+ standardization: ALL findings-summary signals live at the top
   // level. Per-stage rows no longer carry these — there is one final
   // findings list per task and one final outcome, regardless of which
@@ -175,18 +201,17 @@ export const TaskCompletedEventSchema = z.object({
   findingsBySeverity: FindingsBySeveritySchema.optional(),
   findingsOutcome: z.enum(['found', 'clean', 'not_applicable']).nullable().optional(),
   findingsOutcomeReason: z.string().nullable().optional(),
-  outcomeInferred: z.boolean().optional(),
-  outcomeMalformed: z.boolean().optional(),
-  escalationCount: z.number().int().min(0).max(20),
-  fallbackCount: z.number().int().min(0).max(20),
 
   // Files changed — sourced from real git diff (sub-project A), not worker self-report.
   filesWrittenCount: z.number().int().min(0).max(5000),
 
-  // Operational signals
-  stallCount: z.number().int().min(0).max(20),
-  taskMaxIdleMs: z.number().int().min(0).max(1_200_000),
-  sandboxViolationCount: z.number().int().min(0).max(100),
+  // Operational signals.
+  //
+  // Nullable, and the distinction is the point: 0 means the confinement hook
+  // ran and refused nothing, null means this runner cannot observe a refusal at
+  // all (codex confines writes in the OS sandbox). `stallCount` and
+  // `taskMaxIdleMs` stood here reporting a hardcoded 0 on every event.
+  sandboxViolationCount: z.number().int().min(0).max(1000).nullable(),
 
   // Stages array
   stages: z.array(StageEntrySchema).min(0).max(16),
@@ -233,9 +258,12 @@ export const ValidatedTaskCompletedEventSchema = TaskCompletedEventSchema.superR
     }
   }
 
-  // R2.1: empty stages only allowed for brief_too_vague and error
-  if (event.stages.length === 0 && !['brief_too_vague', 'error'].includes(event.terminalStatus)) {
-    ctx.addIssue({ code: 'custom', message: 'R2.1: empty stages only allowed for brief_too_vague|error' });
+  // R2.1: a task with no stages did no LLM work, which is only legitimate when
+  // it never got that far. `brief_too_vague` was in this list and is no longer a
+  // terminalStatus; `unavailable` and `cancelled` join it because both can land
+  // before the implementer produces a billable turn.
+  if (event.stages.length === 0 && !['error', 'unavailable', 'cancelled'].includes(event.terminalStatus)) {
+    ctx.addIssue({ code: 'custom', message: 'R2.1: empty stages only allowed for error|unavailable|cancelled' });
   }
 
   // R4: totalDurationMs >= sum of stage durationMs (not strictly equal due to overhead)
@@ -305,11 +333,8 @@ export const ValidatedTaskCompletedEventSchema = TaskCompletedEventSchema.superR
     }
   }
 
-  // R11: concernCount in [0, 150], escalationCount in [0, 20], fallbackCount in [0, 20]
-  // (enforced by Zod schema bounds)
-
-  // R12: stallCount in [0, 20], sandboxViolationCount in [0, 100]
-  // (enforced by Zod schema bounds)
+  // R11/R12: concernCount and sandboxViolationCount bounds are enforced by the
+  // Zod schema itself.
 
   // R13: totalDurationMs in [0, 86_400_000]
   // (enforced by Zod schema bounds)
@@ -317,10 +342,29 @@ export const ValidatedTaskCompletedEventSchema = TaskCompletedEventSchema.superR
   // R14: totalCostUSD in [0, 800] or null
   // (enforced by Zod schema bounds)
 
-  // R16: rework stage requires the review stage in the same event
-  const stageNames = new Set((event.stages ?? []).map(s => s.name));
-  if (stageNames.has('rework') && !stageNames.has('review')) {
-    ctx.addIssue({ code: 'custom', message: 'R16: rework requires review in the same event' });
+  // R16 required a `rework` stage to be accompanied by `review`. There is no
+  // rework stage in v7 — the pipeline has exactly two phases.
+
+  // R17: findings must agree with the severity histogram. These are two
+  // projections of one list and nothing recomputed them from each other, so a
+  // partial write could report 4 concerns and a histogram summing to 0 — the
+  // exact ambiguity v7 exists to remove.
+  if (event.findingsBySeverity) {
+    const f = event.findingsBySeverity;
+    const sum = f.critical + f.high + f.medium + f.low;
+    if (sum !== event.concernCount) {
+      ctx.addIssue({ code: 'custom', message: `R17: findingsBySeverity sums to ${sum} but concernCount is ${event.concernCount}` });
+    }
+  }
+
+  // R18: `found` must come with findings, and `clean` must not. Without this a
+  // route could report "clean" while carrying findings, and the dashboard would
+  // show a reassuring badge over a list of problems.
+  if (event.findingsOutcome === 'found' && event.concernCount === 0) {
+    ctx.addIssue({ code: 'custom', message: 'R18: findingsOutcome=found requires concernCount > 0' });
+  }
+  if (event.findingsOutcome === 'clean' && event.concernCount > 0) {
+    ctx.addIssue({ code: 'custom', message: 'R18: findingsOutcome=clean requires concernCount = 0' });
   }
 });
 

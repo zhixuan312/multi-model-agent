@@ -3,6 +3,17 @@ import { CLIENT_IDS } from '../../../packages/core/src/clients/client-id.js';
 import { CLIENT_CAPABILITIES } from '../../../packages/server/src/provisioning/capability-registry.js';
 import { resolveEffectiveRoster } from '../../../packages/server/src/provisioning/roster.js';
 
+/**
+ * The roster is restated independently of production ONCE, in
+ * `client-identity-config.test.ts` (`expect(CLIENT_IDS).toEqual([...eight ids])`) — that is where
+ * adding or renaming a client has to be spelled out a second time. A copy here would be a second
+ * place to update for one change, which is the defect this suite exists to prevent, not repeat.
+ *
+ * What this file owns is the RELATIONSHIP: one capability row per canonical id, in order, with
+ * consistent skill-path strategy. Note the ordering half is also enforced in production —
+ * `capability-registry.ts` throws at module load if a row drifts from CLIENT_IDS order — so
+ * these assertions and that guard fail together, by design.
+ */
 describe('contract: client capability roster', () => {
   it('has one valid capability per canonical client and never acts on detection alone', () => {
     expect(CLIENT_CAPABILITIES.map((capability) => capability.id)).toEqual(CLIENT_IDS);

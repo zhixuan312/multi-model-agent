@@ -46,23 +46,21 @@ function provenanceAt(seconds: number) {
   };
 }
 
+/**
+ * What the seeder hands back.
+ *
+ * Two fields, because two are read. This interface used to restate every seeded entity as a flat
+ * tuple — `workspaces`, `resources`, `tasks`, `artifacts`, `requirements`, `criteria`, `decisions`,
+ * `risks`, `evidence`, `verificationRuns`, `links`, `relation`, `events`, `product`,
+ * `relatedInitiative` — fifteen fields no consumer ever touched. They were also a second shape for
+ * objects `expectedResume` already contains, so a test wanting a seeded Task reads
+ * `expectedResume.tasks`.
+ *
+ * The surface was demonstrably unmaintained: `decisions` was typed as a 3-tuple while
+ * `expectedResume.decisions` carried four, and nothing noticed, because nothing read either.
+ */
 export interface SeedResumeFixtureResult {
-  product: Product;
-  workspaces: [Workspace, Workspace];
-  resources: [Resource, Resource, Resource];
   initiative: Initiative;
-  relatedInitiative: Initiative;
-  links: [InitiativeWorkspaceLink, InitiativeWorkspaceLink];
-  relation: InitiativeRelation;
-  tasks: [Task, Task];
-  artifacts: [ArtifactRef, ArtifactRef];
-  requirements: [Requirement, Requirement];
-  criteria: [AcceptanceCriterion, AcceptanceCriterion, AcceptanceCriterion];
-  decisions: [Decision, Decision, Decision];
-  risks: [Risk, Risk, Risk];
-  evidence: [Evidence, Evidence];
-  verificationRuns: [VerificationRun, VerificationRun, VerificationRun];
-  events: Event[];
   expectedResume: InitiativeResumeResponse;
 }
 
@@ -133,12 +131,14 @@ export function seedResumeFixture(runtime: InitiativeRecordRuntime): SeedResumeF
     outcome: 'delivered',
   });
 
-  const linkOne = call<InitiativeWorkspaceLink>('initiative_link_workspace', {
+  // Seeded for their effect on `expectedResume.workspaces`, not for their return value — the
+  // links themselves are not part of the resume response.
+  call<InitiativeWorkspaceLink>('initiative_link_workspace', {
     initiative_id: initiative.uuid,
     workspace_id: workspaceOne.uuid,
     role: 'consumes',
   });
-  const linkTwo = call<InitiativeWorkspaceLink>('initiative_link_workspace', {
+  call<InitiativeWorkspaceLink>('initiative_link_workspace', {
     initiative_id: initiative.uuid,
     workspace_id: workspaceTwo.uuid,
     role: 'references',
@@ -666,6 +666,13 @@ export function seedResumeFixture(runtime: InitiativeRecordRuntime): SeedResumeF
   // seeded), `decisions_settled` reads unsatisfied (`decisionOpen` remains `'open'`),
   // and every `manual` Establishment reads unsatisfied (no `initiative_phase_satisfy`
   // call was ever made).
+  //
+  // SPEC-004 FR-8 (Task I-3 gate-shape change): `gate.establishments` now lists EVERY
+  // required Establishment for the phase, satisfied and unsatisfied alike — `gate.missing`
+  // stays exactly the unsatisfied subset. The deliver phase is the case that motivated the
+  // change: `deliverables_valid` is present and vacuously satisfied (this fixture defines no
+  // Deliverables), so it must appear in `establishments` even though it never appears in
+  // `missing`.
   const expectedLifecycle: LifecycleResumeBlock = {
     focus_phase: null,
     contract: 'default-sdl@1',
@@ -675,6 +682,13 @@ export function seedResumeFixture(runtime: InitiativeRecordRuntime): SeedResumeF
         state: 'not_started',
         gate: {
           status: 'red',
+          establishments: [
+            {
+              establishment: { key: 'problem_framed', satisfier: 'manual' },
+              satisfied: false,
+              detail: "Manual establishment 'problem_framed' has not been asserted for this phase and contract.",
+            },
+          ],
           missing: [
             {
               establishment: { key: 'problem_framed', satisfier: 'manual' },
@@ -689,6 +703,23 @@ export function seedResumeFixture(runtime: InitiativeRecordRuntime): SeedResumeF
         state: 'not_started',
         gate: {
           status: 'red',
+          establishments: [
+            {
+              establishment: { key: 'scoped_goal', satisfier: 'manual' },
+              satisfied: false,
+              detail: "Manual establishment 'scoped_goal' has not been asserted for this phase and contract.",
+            },
+            {
+              establishment: { key: 'requirements_defined', satisfier: 'requirements_exist' },
+              satisfied: true,
+              detail: "At least one Requirement must be recorded (establishment 'requirements_defined').",
+            },
+            {
+              establishment: { key: 'acceptance_criteria_defined', satisfier: 'acceptance_criteria_exist' },
+              satisfied: true,
+              detail: "At least one Acceptance Criterion must be recorded (establishment 'acceptance_criteria_defined').",
+            },
+          ],
           missing: [
             {
               establishment: { key: 'scoped_goal', satisfier: 'manual' },
@@ -703,6 +734,18 @@ export function seedResumeFixture(runtime: InitiativeRecordRuntime): SeedResumeF
         state: 'not_started',
         gate: {
           status: 'red',
+          establishments: [
+            {
+              establishment: { key: 'design_artifact', satisfier: 'manual' },
+              satisfied: false,
+              detail: "Manual establishment 'design_artifact' has not been asserted for this phase and contract.",
+            },
+            {
+              establishment: { key: 'key_decisions_settled', satisfier: 'decisions_settled' },
+              satisfied: false,
+              detail: "Every recorded Decision must reach a non-'open' status (establishment 'key_decisions_settled').",
+            },
+          ],
           missing: [
             {
               establishment: { key: 'design_artifact', satisfier: 'manual' },
@@ -717,12 +760,19 @@ export function seedResumeFixture(runtime: InitiativeRecordRuntime): SeedResumeF
           ],
         },
       },
-      { phase: 'execute', state: 'not_started', gate: { status: 'green', missing: [] } },
+      { phase: 'execute', state: 'not_started', gate: { status: 'green', establishments: [], missing: [] } },
       {
         phase: 'verify',
         state: 'not_started',
         gate: {
           status: 'red',
+          establishments: [
+            {
+              establishment: { key: 'acceptance_verified', satisfier: 'manual' },
+              satisfied: false,
+              detail: "Manual establishment 'acceptance_verified' has not been asserted for this phase and contract.",
+            },
+          ],
           missing: [
             {
               establishment: { key: 'acceptance_verified', satisfier: 'manual' },
@@ -737,6 +787,18 @@ export function seedResumeFixture(runtime: InitiativeRecordRuntime): SeedResumeF
         state: 'not_started',
         gate: {
           status: 'red',
+          establishments: [
+            {
+              establishment: { key: 'delivery_confirmed', satisfier: 'manual' },
+              satisfied: false,
+              detail: "Manual establishment 'delivery_confirmed' has not been asserted for this phase and contract.",
+            },
+            {
+              establishment: { key: 'deliverables_valid', satisfier: 'deliverables_valid' },
+              satisfied: true,
+              detail: "Every Deliverable must be 'valid' or 'human_approved' (establishment 'deliverables_valid').",
+            },
+          ],
           missing: [
             {
               establishment: { key: 'delivery_confirmed', satisfier: 'manual' },
@@ -773,6 +835,9 @@ export function seedResumeFixture(runtime: InitiativeRecordRuntime): SeedResumeF
       { acceptance_criterion_id: criterionOneB.uuid, latest: verificationTwoFail },
     ],
     lifecycle: expectedLifecycle,
+    // MMA Next gap-closure (§15): this fixture defines no Deliverables, so the additive
+    // `deliverables` resume section and its count both read empty/zero.
+    deliverables: [],
     counts: {
       workspaces: 2,
       resources: 3,
@@ -797,26 +862,9 @@ export function seedResumeFixture(runtime: InitiativeRecordRuntime): SeedResumeF
         not_applicable: 0,
         superseded: 1,
       },
+      deliverables_by_validation_state: { pending: 0, valid: 0, invalid: 0, human_approved: 0 },
     },
   };
 
-  return {
-    product,
-    workspaces: [workspaceOne, workspaceTwo],
-    resources: [resourceOne, resourceTwo, resourceThree],
-    initiative,
-    relatedInitiative,
-    links: [linkOne, linkTwo],
-    relation,
-    tasks: [taskOpen, taskDone],
-    artifacts: [artifactOne, artifactTwo],
-    requirements: [requirementOne, requirementTwo],
-    criteria: [criterionOneA, criterionOneB, criterionTwoA],
-    decisions: [decisionOpen, decisionDecided, decisionSuperseding],
-    risks: [riskHighOpen, riskLowOpen, riskMediumClosed],
-    evidence: [evidenceOne, evidenceTwo],
-    verificationRuns: [verificationOnePending, verificationOnePass, verificationTwoFail],
-    events,
-    expectedResume,
-  };
+  return { initiative, expectedResume };
 }

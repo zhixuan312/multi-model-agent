@@ -51,11 +51,17 @@ export function createOrAdoptToken(resolved: string): string {
 }
 
 /**
- * Validate an Authorization header value (including "Bearer " prefix).
- * Uses crypto.timingSafeEqual to prevent timing attacks.
+ * Validate an Authorization header value (including the "Bearer " prefix).
+ * Uses `crypto.timingSafeEqual` so the token comparison is constant-time.
  *
- * Returns { ok: true } on success.
- * Returns { ok: false, reason } on failure without leaking which check failed.
+ * Returns `{ ok: true }`, or `{ ok: false, reason }` naming which check failed.
+ *
+ * The old wording here said it fails "without leaking which check failed", which is the opposite
+ * of what it does — `reason` is precisely that, and it is the only thing the function reports
+ * beyond pass/fail. The property that actually holds belongs to the CALLER:
+ * `request-pipeline.ts` answers every failure with the same generic 401 and writes the reason to
+ * the daemon's stderr instead. Keep it that way; the distinction is for the operator reading logs,
+ * never for the client.
  */
 export function validateAuthHeader(
   header: string | undefined,

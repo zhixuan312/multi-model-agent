@@ -108,7 +108,6 @@ describe('decompress pipeline integration', () => {
           'Content-Type': 'application/json',
           'Content-Encoding': 'gzip',
           "X-MMA-Main-Model": "claude-opus-4-7", "X-MMA-Client": "claude-code",
-          "X-MMA-Main-Model": "claude-opus-4-7", "X-MMA-Client": "claude-code",
           Authorization: `Bearer ${h.token}`,
         },
         body: compressed,
@@ -128,12 +127,43 @@ describe('decompress pipeline integration', () => {
           'Content-Type': 'application/json',
           'Content-Encoding': 'gzip',
           "X-MMA-Main-Model": "claude-opus-4-7", "X-MMA-Client": "claude-code",
-          "X-MMA-Main-Model": "claude-opus-4-7", "X-MMA-Client": "claude-code",
           Authorization: `Bearer ${h.token}`,
         },
         body: Buffer.from('not gzip data'),
       });
       expect(res.status).toBe(400);
+    } finally {
+      await h.close();
+    }
+  });
+
+  /**
+   * The cap that stops a zip bomb has to be the CONFIGURED one.
+   *
+   * `decompressBody`'s unit cases pass a cap in by hand, so they hold whatever
+   * `request-pipeline.ts` does with `cfg.server.limits.maxBodyBytes` — including nothing. The
+   * default 10MB is large enough that every integration case here passes with the limit
+   * hardcoded, ignored, or read from the wrong field. Sending 40KB of gzipped 'x' (about 100
+   * bytes compressed) against a 4KB configured cap is only rejected if the config value is the
+   * one being enforced.
+   */
+  it('enforces the CONFIGURED maxBodyBytes on a decompressed body, not a built-in default', async () => {
+    const h = await boot({ provider: mockProvider({ stage: 'ok' }), cwd: process.cwd(), limits: { maxBodyBytes: 4096 } });
+    try {
+      const bomb = JSON.stringify({ type: 'review', target: { inline: 'x'.repeat(40_000) } });
+      const compressed = gzipSync(Buffer.from(bomb));
+      expect(compressed.byteLength).toBeLessThan(4096); // the point: small on the wire, large inflated
+      const res = await fetch(`${h.baseUrl}/execution?cwd=${encodeURIComponent(process.cwd())}`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Content-Encoding': 'gzip',
+          'X-MMA-Main-Model': 'claude-opus-4-7', 'X-MMA-Client': 'claude-code',
+          Authorization: `Bearer ${h.token}`,
+        },
+        body: compressed,
+      });
+      expect(res.status).toBe(413);
     } finally {
       await h.close();
     }
@@ -148,7 +178,6 @@ describe('decompress pipeline integration', () => {
         headers: {
           'Content-Type': 'application/json',
           'Content-Encoding': 'br',
-          "X-MMA-Main-Model": "claude-opus-4-7", "X-MMA-Client": "claude-code",
           "X-MMA-Main-Model": "claude-opus-4-7", "X-MMA-Client": "claude-code",
           Authorization: `Bearer ${h.token}`,
         },

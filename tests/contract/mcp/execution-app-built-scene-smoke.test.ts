@@ -45,7 +45,7 @@ async function driveBuiltPanel() {
 
   const dom = new JSDOM(html, { runScripts: 'outside-only', url: 'https://app.local/', pretendToBeVisual: true });
   const { window } = dom;
-  let deliver: ((v: unknown) => void) | undefined;
+  let deliver: (v: unknown) => void = () => {};
   let last = '{}';
   const calls: string[] = [];
   (window as unknown as { __MMA_CREATE_APP__: () => unknown }).__MMA_CREATE_APP__ = () => ({

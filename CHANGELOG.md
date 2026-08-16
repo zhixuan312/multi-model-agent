@@ -5,6 +5,64 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [6.10.0] - 2026-08-16
+
+### Fixed
+
+- **A claimed Initiative Task could never be released, completed, or advanced** when the caller's
+  `provenance.actor_id` and `provenance.authorized_by` differ. `initiative_task_claim` recorded
+  `claimed_by` from `actor_id`, while `initiative_task_release`, `initiative_task_complete` and
+  `initiative_task_execution`'s gated `claimed → in_progress` all compare against `authorized_by`.
+  The Task was left permanently `claimed`, returning `task_claim_conflict` on every attempt. Claim
+  now records `authorized_by`, matching all three readers.
+
+  This affected any caller whose two identity fields differ — including this engine's own
+  `initiative-linker`, which sets `actor_id: 'system:initiative-linker'` as a constant and carries
+  the real caller in `authorized_by`.
+
+  **Recovering a Task already stuck by this bug:** its `claimed_by` still holds the old `actor_id`,
+  so an agent caller remains blocked. Call `initiative_task_release` with
+  `provenance.actor_type: 'human'` — release (and only release) allows a human actor to break an
+  ownership mismatch. The Task returns to `open` and can be claimed normally. No migration is
+  required and no data is rewritten; nothing else about the Task changes.
+
+### Added
+
+- **`mma execution wait <executionId> [--timeout N] [--interval N]`** — blocks until an execution is
+  terminal and exits `0` (succeeded) / `1` (failed, cancelled, interrupted) / `3` (timed out, still
+  running) / `4` (unreachable, unauthorized, or unknown id).
+
+  This exists for agent callers, which only execute in bursts. `mma_execution_wait` over MCP is
+  capped at 55s by the client's request deadline, so anything longer needs a polling loop — and a
+  loop needs a caller that is still running. Nothing wakes an agent for an mma execution either: the
+  daemon owns it, so the client's task tracking has no handle on it. A blocking CLI command converts
+  that untracked wait into one the caller's own harness owns and notices:
+
+  ```bash
+  mma execution wait <id> --timeout 3600   # run it as a tracked background job
+  ```
+
+  It also removes the need to hand-roll a poller. A real incident had one polling `curl -s …
+  | parse .status` with no Authorization header: every request returned 401, the parser found no
+  `status` field, the loop read that as "still running", and it polled the error for two hours while
+  the work had long since finished. This command reads the token itself, and any non-2xx response
+  EXITS with a distinct code instead of looping. A timeout says explicitly that the execution is
+  unaffected and was not cancelled, so a caller does not re-dispatch finished work.
+
+### Changed
+
+- **Long dispatches now tell you that your polling is turn-bound.** `mma_run` returns a handle and
+  the docs said "to wait longer, call again" — without saying that "call again" only happens while
+  your turn is active, or that your client is never notified when an mma execution finishes (the
+  execution belongs to the daemon, not to your client's task tracking). A caller could dispatch, end
+  its turn, and believe it was monitoring work that had in fact stopped being watched hours earlier.
+
+  The execution itself was never affected: it keeps running in the daemon and its terminal envelope
+  is persisted, so `mma_execution_get` returns it later even across a restart. **Nothing was ever
+  lost** — which is why this went unnoticed. The shared skill guidance and the `mma_execution_wait`
+  tool description now say so, and say what to do instead: hand the waiting to a background job your
+  client tracks.
+
 ## [6.9.0] - 2026-08-11
 
 Journal recall gets three fixes that only appear at scale, and the daemon stops freezing while it

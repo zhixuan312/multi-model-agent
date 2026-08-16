@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { readFileSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync } from 'node:fs';
 
 /**
  * Incidental tilt — the success metric the specification froze, implemented.
@@ -59,13 +59,48 @@ describe('incidental tilt — generic assets stay deliverable-neutral', () => {
 
   // FR-18: leaving ONE stage software-shaped is enough to make a whole non-software flow read
   // wrong to its user, so the caller-facing surfaces are swept against the same threshold.
-  const CALLER_FACING = [
-    'mma-explore', 'mma-brainstorm', 'mma-plan', 'mma-execute-plan',
-    'mma-review', 'mma-investigate', 'mma-debug', 'multi-model-agent',
-  ];
-  it.each(CALLER_FACING)('caller-facing skill %s is at or under the cap', (skill) => {
+  //
+  // DERIVED from the packaged skills, not hand-listed. The list here used to name eight skills,
+  // which is not what "the caller-facing surfaces are swept" says: twelve others — `mma-spec`
+  // among them, the deliverable-neutral centrepiece — were never measured, and a NEWLY added
+  // skill was ungated by default. Silence read exactly like a decision.
+  //
+  // Exemptions are now decisions with reasons. Both entries below carry vocabulary the test's
+  // own preamble calls INTRINSIC ("vocabulary a route genuinely needs"): their matches are almost
+  // entirely repo/PR/branch/commit — how a deliverable REACHES the caller, which is these two
+  // routes' actual subject — and contain essentially no code-language terms. `mma-flow` measures
+  // 0.376 across 747 lines, of which repo(108) PR(45) branch(36) git(31) commit(30) merge(13)
+  // account for nearly all of it; `mma-delegate` measures 0.262 the same way.
+  const INTRINSIC: Readonly<Record<string, string>> = {
+    'mma-flow': 'multi-repo topology detection and pr/commit-in-place dispositions ARE the subject',
+    'mma-delegate': 'documents the commit the route makes on the caller branch',
+  };
+
+  const CALLER_FACING = readdirSync('packages/server/src/skills', { withFileTypes: true })
+    .filter((e) => e.isDirectory() && e.name !== '_shared')
+    .map((e) => e.name)
+    .filter((name) => existsSync(`packages/server/src/skills/${name}/SKILL.md`))
+    .sort();
+
+  it('finds the caller-facing skills', () => {
+    // A floor: an empty derived list would make every case below vacuous.
+    expect(CALLER_FACING.length).toBeGreaterThan(15);
+    expect(CALLER_FACING).toContain('mma-spec');
+  });
+
+  it.each(CALLER_FACING.filter((s) => !(s in INTRINSIC)))(
+    'caller-facing skill %s is at or under the cap',
+    (skill) => {
+      const ratio = tiltRatio(read(`packages/server/src/skills/${skill}/SKILL.md`));
+      expect(ratio, `${skill} ratio ${ratio.toFixed(3)} exceeds ${GENERIC_CAP}`)
+        .toBeLessThanOrEqual(GENERIC_CAP);
+    },
+  );
+
+  // An exemption that is no longer needed must be DELETED, not left to hide a future regression.
+  it.each(Object.keys(INTRINSIC))('exemption for %s is still needed', (skill) => {
     const ratio = tiltRatio(read(`packages/server/src/skills/${skill}/SKILL.md`));
-    expect(ratio, `${skill} ratio ${ratio.toFixed(3)} exceeds ${GENERIC_CAP}`)
-      .toBeLessThanOrEqual(GENERIC_CAP);
+    expect(ratio, `${skill} now measures ${ratio.toFixed(3)} — remove it from INTRINSIC`)
+      .toBeGreaterThan(GENERIC_CAP);
   });
 });

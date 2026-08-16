@@ -1,10 +1,11 @@
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
+import { SANDBOX_ESCAPE_TARGETS } from './dispatch.mjs';
 import { SCHEMA_VERSION, configuredMainModel, configuredWorkerModels } from './config.mjs';
 import { SMOKE_CLIENT } from './http.mjs';
 // The component catalog is defined ONCE, in the core package (AC-5.4). A second copy here could
 // only ever agree with itself: if the catalog changed, this harness would keep asserting the old
 // identifiers and report a passing spec while the product emitted something else.
-import { SPEC_COMPONENTS } from '../../packages/core/dist/index.js';
+import { SPEC_COMPONENTS, TASK_TYPES } from '../../packages/core/dist/index.js';
 const CANON = SPEC_COMPONENTS;
 
 const C = (checkId, status, detail = '') => ({ checkId, status, detail });
@@ -226,11 +227,11 @@ export function verify(rec) {
 
   // ─── Assist routes (context-blocks): minimal envelope check ───
   if (e.kind === 'assist') {
-    out.push(C('register', r && r.task ? 'PASS' : 'WARN', JSON.stringify(r?.error)));
+    out.push(C('register', r && r.execution ? 'PASS' : 'WARN', JSON.stringify(r?.error)));
     return out;
   }
 
-  // ─── Cooperative cancellation (#39): DELETE /task/:id ───
+  // ─── Cooperative cancellation (#39): DELETE /execution/:id ───
   //     202 means REQUESTED, not stopped. The contract is the whole lifecycle:
   //     the ack carries the flag, a poll taken immediately after still reports
   //     `running` WITH the flag, and only once the runner confirms termination
@@ -250,8 +251,8 @@ export function verify(rec) {
     out.push(C('cancel-flag-visible', midFlight || alreadyTerminal ? 'PASS' : 'FAIL',
       `status=${p.status} flag=${p.body?.cancellationRequested}`));
 
-    out.push(C('terminal-cancelled', r?.task?.status === 'cancelled' ? 'PASS' : 'FAIL',
-      `status=${r?.task?.status}`));
+    out.push(C('terminal-cancelled', r?.execution?.status === 'cancelled' ? 'PASS' : 'FAIL',
+      `status=${r?.execution?.status}`));
     out.push(C('cancel-error-code', r?.error?.code === 'aborted' ? 'PASS' : 'FAIL',
       `error=${JSON.stringify(r?.error)}`));
     out.push(C('reviewer-skipped', r?.metrics?.reviewer === null ? 'PASS' : 'FAIL',
@@ -264,7 +265,7 @@ export function verify(rec) {
 
     const keys = Object.keys(r ?? {}).sort();
     out.push(C('layered-200',
-      JSON.stringify(keys) === JSON.stringify(['error', 'execution', 'metrics', 'output', 'raw', 'task'])
+      JSON.stringify(keys) === JSON.stringify(['error', 'execution', 'metrics', 'output', 'raw'])
         ? 'PASS' : 'FAIL', `keys=${keys.join(',')}`));
     return out;
   }
@@ -296,10 +297,10 @@ export function verify(rec) {
     // A taskId proves the adapter ACCEPTED both fields: a rejection returns a tool error instead.
     out.push(C('mcp-contract-accepted', m.taskId ? 'PASS' : 'FAIL',
       m.taskId ? `taskId=${m.taskId}` : `no taskId — payload=${JSON.stringify(m.runPayload).slice(0, 220)}`));
-    out.push(C('mcp-method-echoed', r?.task?.method === 'software-change@1' ? 'PASS' : 'FAIL',
-      `task.method=${r?.task?.method} (must survive the MCP path exactly as it does over REST)`));
-    out.push(C('mcp-terminal-clean', r?.task?.status && !r?.error ? 'PASS' : 'FAIL',
-      `status=${r?.task?.status} error=${JSON.stringify(r?.error)}`));
+    out.push(C('mcp-method-echoed', r?.execution?.method === 'software-change@1' ? 'PASS' : 'FAIL',
+      `execution.method=${r?.execution?.method} (must survive the MCP path exactly as it does over REST)`));
+    out.push(C('mcp-terminal-clean', r?.execution?.status && !r?.error ? 'PASS' : 'FAIL',
+      `status=${r?.execution?.status} error=${JSON.stringify(r?.error)}`));
     return out;
   }
 
@@ -309,19 +310,34 @@ export function verify(rec) {
   if (e.kind === 'mcp-tools') {
     const m = rec.mcpTools ?? {};
     out.push(C('mcp-context-block-create', m.blockId ? 'PASS' : 'FAIL', `blockId=${m.blockId}`));
-    const listed = Array.isArray(m.listPayload?.tasks) ? m.listPayload.tasks : (Array.isArray(m.listPayload) ? m.listPayload : null);
+    const listed = Array.isArray(m.listPayload?.executions) ? m.listPayload.executions
+      : (Array.isArray(m.listPayload) ? m.listPayload : null);
     out.push(C('mcp-task-list', listed !== null ? 'PASS' : 'FAIL',
-      `tasks=${listed ? listed.length : 'not an array'} — the tool must return a task collection`));
-    out.push(C('mcp-task-get', m.getPayload?.taskId === m.taskId ? 'PASS' : 'FAIL',
-      `returned taskId=${m.getPayload?.taskId} want=${m.taskId}`));
+      `executions=${listed ? listed.length : 'not an array'} — the tool must return an execution collection`));
+    out.push(C('mcp-task-get', m.getPayload?.executionId === m.taskId ? 'PASS' : 'FAIL',
+      `returned executionId=${m.getPayload?.executionId} want=${m.taskId}`));
     // Cancellation is REQUESTED, so either acknowledgement shape is correct; what must not happen
     // is the tool failing to answer at all.
-    out.push(C('mcp-task-cancel', m.cancelPayload !== null && m.cancelPayload !== undefined ? 'PASS' : 'FAIL',
-      `ack=${JSON.stringify(m.cancelPayload)}`));
-    out.push(C('mcp-cancel-reached-terminal', ['cancelled', 'done', 'done_with_concerns', 'failed'].includes(m.terminal?.task?.status) ? 'PASS' : 'WARN',
-      `terminal status=${m.terminal?.task?.status}`));
-    out.push(C('mcp-context-block-delete', m.deleteBlock !== null && m.deleteBlock !== undefined ? 'PASS' : 'WARN',
-      `delete=${JSON.stringify(m.deleteBlock)}`));
+    // A non-null payload is NOT an ack. An MCP tool error carries a parseable `{error:{...}}` body
+    // too, so the old "did it parse" check scored a rejected cancel as a successful one. The ack
+    // has a shape — `cancellationRequested: true` on the execution we asked about — and that shape
+    // is what proves the request reached the runtime.
+    const ack = m.cancelPayload;
+    const cancelOk = m.cancelIsError === false
+      && ack?.cancellationRequested === true
+      && ack?.executionId === m.taskId;
+    out.push(C('mcp-task-cancel', cancelOk ? 'PASS' : 'FAIL',
+      `isError=${m.cancelIsError} ack=${JSON.stringify(ack)}`));
+    out.push(C('mcp-cancel-reached-terminal', ['cancelled', 'done', 'done_with_concerns', 'failed'].includes(m.terminal?.execution?.status) ? 'PASS' : 'WARN',
+      `terminal status=${m.terminal?.execution?.status}`));
+    // Assert the delete SUCCEEDED, not that a response object came back. The old check was
+    // `m.deleteBlock !== null && !== undefined ? PASS : WARN` — an MCP error result is a non-null
+    // object, so it passed on failure. It was passing on failure: the call sent `{ id }` while the
+    // tool's schema requires `blockId` with additionalProperties:false, so every run got
+    // `invalid_request` and reported PASS. The handler returns `{ ok: true }`.
+    out.push(C('mcp-context-block-delete',
+      m.deleteIsError === false && m.deleteBlock?.ok === true ? 'PASS' : 'FAIL',
+      `isError=${m.deleteIsError} delete=${JSON.stringify(m.deleteBlock)}`));
     return out;
   }
 
@@ -371,11 +387,31 @@ export function verify(rec) {
     // A deliberate golden, not a derived list: growing or shrinking the MCP tool
     // surface is a wire-contract change every consumer feels, so it should require
     // editing this line. (It went stale once — `mma_task_list` and the two
-    // context-block tools shipped while this still expected the original four.)
+    // context-block tools shipped while this still expected the original four; then the whole
+    // record surface shipped while this still expected the pre-SPEC-003 task vocabulary, which
+    // is exactly what this run caught.)
     const toolNames = (m.tools?.json?.result?.tools ?? []).map((t) => t.name).sort();
     const expected = [
-      'mma_context_block_create', 'mma_context_block_delete', 'mma_run',
-      'mma_task_cancel', 'mma_task_get', 'mma_task_list', 'mma_task_wait',
+      'mma_acceptance_criterion_add', 'mma_acceptance_criterion_get', 'mma_acceptance_criterion_list', 'mma_artifact_get',
+      'mma_artifact_register', 'mma_context_block_create', 'mma_context_block_delete', 'mma_decision_get',
+      'mma_decision_list', 'mma_decision_record', 'mma_decision_supersede', 'mma_deliverable_approve',
+      'mma_deliverable_attach_artifact', 'mma_deliverable_define', 'mma_deliverable_deliver', 'mma_deliverable_get',
+      'mma_deliverable_list', 'mma_deliverable_package', 'mma_deliverable_validate', 'mma_delivery_contract_get',
+      'mma_delivery_contract_list', 'mma_evidence_add', 'mma_evidence_get', 'mma_evidence_link',
+      'mma_evidence_links_list', 'mma_evidence_list', 'mma_execution_cancel', 'mma_execution_get',
+      'mma_execution_list', 'mma_execution_wait', 'mma_initiative_bootstrap', 'mma_initiative_create',
+      'mma_initiative_export', 'mma_initiative_focus_set', 'mma_initiative_gate_status', 'mma_initiative_get',
+      'mma_initiative_import', 'mma_initiative_initiative_task_set_method', 'mma_initiative_link_workspace', 'mma_initiative_list',
+      'mma_initiative_method_get', 'mma_initiative_method_list', 'mma_initiative_phase_enter', 'mma_initiative_phase_reopen',
+      'mma_initiative_phase_satisfy', 'mma_initiative_phase_skip', 'mma_initiative_relate', 'mma_initiative_relations',
+      'mma_initiative_resume', 'mma_initiative_set_lifecycle_contract', 'mma_initiative_status', 'mma_initiative_task_claim',
+      'mma_initiative_task_complete', 'mma_initiative_task_create', 'mma_initiative_task_execution', 'mma_initiative_task_get',
+      'mma_initiative_task_list', 'mma_initiative_task_release', 'mma_product_create', 'mma_product_get',
+      'mma_product_list', 'mma_requirement_add', 'mma_requirement_get', 'mma_requirement_list',
+      'mma_resource_list', 'mma_resource_register', 'mma_risk_add', 'mma_risk_get',
+      'mma_risk_list', 'mma_risk_status', 'mma_run', 'mma_verification_get',
+      'mma_verification_list', 'mma_verification_record', 'mma_verification_run', 'mma_workspace_create',
+      'mma_workspace_get', 'mma_workspace_list',
     ];
     out.push(C('mcp-tools', JSON.stringify(toolNames) === JSON.stringify(expected) ? 'PASS' : 'FAIL',
       `tools=${toolNames.join(',')}`));
@@ -403,22 +439,38 @@ export function verify(rec) {
     const runTool = (m.tools?.json?.result?.tools ?? []).find((t) => t.name === 'mma_run');
     const reqSchema = runTool?.inputSchema?.properties?.request;
     const variants = reqSchema?.oneOf ?? reqSchema?.anyOf ?? [];
-    out.push(C('mcp-generated-schema', variants.length === 12 ? 'PASS' : 'FAIL',
-      `request variants=${variants.length} (expected 12, one per task type)`));
+    // One variant per task type, counted from TASK_TYPES rather than the literal 12 this used to
+    // carry. The schema is GENERATED from that union, so a thirteenth type would have failed this
+    // check for being correct — and the harness's own task-type gate would have demanded a scenario
+    // for it at the same time. Two gates disagreeing about the same addition is worse than either.
+    out.push(C('mcp-generated-schema', variants.length === TASK_TYPES.length ? 'PASS' : 'FAIL',
+      `request variants=${variants.length} (expected ${TASK_TYPES.length}, one per task type)`));
 
     out.push(C('mcp-run-handle', m.taskId ? 'PASS' : 'FAIL',
       `payload=${JSON.stringify(m.runPayload).slice(0, 160)}`));
 
     const w = m.waitPayload;
-    out.push(C('mcp-terminal', w?.task?.status && w.task.status !== 'failed' ? 'PASS' : 'FAIL',
-      `status=${w?.task?.status} error=${JSON.stringify(w?.error)}`));
+    out.push(C('mcp-terminal', w?.execution?.status && w.execution.status !== 'failed' ? 'PASS' : 'FAIL',
+      `status=${w?.execution?.status} error=${JSON.stringify(w?.error)}`));
 
-    // THE load-bearing assertion: the same execution read over REST must be
+    // `mma_execution_wait` is capped at 55s by design (MCP hosts give up around 60s), so a task
+    // slower than that returning before terminal is CORRECT, not a defect — reported, never failed.
+    out.push(C('mcp-wait-bounded', 'PASS',
+      m.waitReachedTerminal === true
+        ? 'mma_execution_wait returned the terminal envelope within its 55s cap'
+        : 'wait returned before terminal (task outran the 55s cap, as designed); parity uses mma_execution_get'));
+
+    // THE load-bearing assertion: the same execution read over MCP and over REST must be
     // byte-identical — one runtime, two transports, no duplicated state.
-    const parity = m.restStatus === 200
-      && JSON.stringify(m.restEnvelope) === JSON.stringify(w);
+    //
+    // Compares the MCP `mma_execution_get` read, NOT the wait payload. The wait payload silently
+    // becomes a REST envelope whenever the task outruns the cap, which turned this into REST-vs-REST
+    // on every long task — the assertion passing regardless of what MCP returned.
+    const mcpSide = m.mcpTerminal;
+    const identical = JSON.stringify(m.restEnvelope) === JSON.stringify(mcpSide);
+    const parity = m.restStatus === 200 && mcpSide != null && identical;
     out.push(C('mcp-rest-parity', parity ? 'PASS' : 'FAIL',
-      `restStatus=${m.restStatus} identical=${JSON.stringify(m.restEnvelope) === JSON.stringify(w)}`));
+      `restStatus=${m.restStatus} mcpGet=${mcpSide ? 'present' : 'MISSING'} identical=${identical}`));
 
     // Caller attribution over MCP (6.2.0). The handshake sends clientInfo
     // name='full-smoke', which is NOT in the allowlist, so resolution must fall
@@ -441,17 +493,17 @@ export function verify(rec) {
   //     via env.error. ───
   if (e.kind === 'async_error') {
     const keys = Object.keys(r ?? {}).sort();
-    const shapeOk = JSON.stringify(keys) === JSON.stringify(['error', 'execution', 'metrics', 'output', 'raw', 'task']);
+    const shapeOk = JSON.stringify(keys) === JSON.stringify(['error', 'execution', 'metrics', 'output', 'raw']);
     out.push(C('layered-200', shapeOk ? 'PASS' : 'FAIL', `keys=${keys.join(',')}`));
     const err = r?.error;
     const errOk = err && typeof err.code === 'string' && typeof err.message === 'string';
     out.push(C('async-error-envelope', errOk ? 'PASS' : 'FAIL', `error=${JSON.stringify(err)}`));
-    out.push(C('async-error-status', r?.task?.status === 'failed' ? 'PASS' : 'FAIL', `status=${r?.task?.status}`));
+    out.push(C('async-error-status', r?.execution?.status === 'failed' ? 'PASS' : 'FAIL', `status=${r?.execution?.status}`));
     return out;
   }
 
   // New layered response: { task, output, execution, metrics, raw, error }
-  const taskStatus = r?.task?.status;
+  const taskStatus = r?.execution?.status;
   const implSessionId = r?.execution?.sessions?.implementer;
   const revSessionId = r?.execution?.sessions?.reviewer;
 
@@ -553,13 +605,18 @@ export function verify(rec) {
   // Read-type specific checks
   if (e.kind === 'read') {
     if (e.type === 'research') {
-      // sourcesUsed is no longer on the response envelope — research sources
-      // are internal to the research orchestrator. The task completed if we
-      // reached here, so we mark sources as PASS with a note.
-      out.push(C('research-sources', 'PASS',
-        `sourcesUsed not in response envelope (internal to research orchestrator)`));
-      out.push(C('research-adapter-surface', 'PASS',
-        `adapter surface validated server-side`));
+      // These were two hardcoded PASSes whose own notes admitted they checked nothing
+      // ("validated server-side"). `sourcesUsed` did leave the envelope, but the research refiner
+      // schema still requires `url` and `source` on every finding — that IS the adapter surface
+      // reaching the caller, and it is observable right here.
+      const researchFindings = r?.output?.summary?.findings ?? [];
+      const sourced = researchFindings.filter((f) => typeof f?.url === 'string' && f.url.length > 0
+        && typeof f?.source === 'string' && f.source.length > 0);
+      out.push(C('research-sources', researchFindings.length > 0 && sourced.length === researchFindings.length ? 'PASS' : 'FAIL',
+        `${sourced.length}/${researchFindings.length} findings carry both url and source`));
+      const distinctSources = new Set(sourced.map((f) => f.source));
+      out.push(C('research-adapter-surface', distinctSources.size > 0 ? 'PASS' : 'FAIL',
+        `sources reaching the caller: ${[...distinctSources].join(', ') || 'NONE'}`));
     }
   }
 
@@ -629,19 +686,28 @@ export function verify(rec) {
   if (e.sandbox) {
     const output = r?.raw?.implementer ?? (typeof r?.output?.summary === 'string' ? r.output.summary : '') ?? '';
 
-    if (e.sandbox === 'cwd-only' && e.id === 20) {
-      // The worker was told to write to /tmp; the hook should have denied it.
-      // Worker should have adapted and written in-cwd instead.
-      const wroteInCwd = /confined|CONFINED|src\/confined/.test(output) || taskStatus === 'done' || taskStatus === 'done_with_concerns';
-      out.push(C('sandbox-cwd-escape', wroteInCwd ? 'PASS' : 'WARN',
-        `worker adapted to cwd confinement; status=${taskStatus}; output has confined=${/confined/i.test(output)}`));
-    }
-
-    if (e.sandbox === 'cwd-only' && e.id === 21) {
-      // The worker was told to cd /tmp && touch file; the hardened hook should block.
-      const adapted = /cd.safe|CD_SAFE|src\/cd-safe/.test(output) || taskStatus === 'done' || taskStatus === 'done_with_concerns';
-      out.push(C('sandbox-cd-chain', adapted ? 'PASS' : 'WARN',
-        `cd-chain escape blocked; status=${taskStatus}; output has cd-safe=${/cd.safe/i.test(output)}`));
+    // These two checks used to read `<adapted> || taskStatus === 'done'`. Every scenario reaches a
+    // terminal status, so the `||` made them pass unconditionally: the checks guarding sandbox
+    // confinement never evaluated confinement at all. They now assert the only thing that actually
+    // settles it — whether the escape file exists on disk. `dispatch.mjs` removes each target
+    // before the run, so absence here is evidence rather than luck, and an escape is a hard FAIL
+    // rather than a WARN, because a worker outside its cwd is the failure the sandbox exists for.
+    if (e.sandbox === 'cwd-only' && (e.id === 20 || e.id === 21)) {
+      const escapeTarget = SANDBOX_ESCAPE_TARGETS[e.id];
+      const escaped = escapeTarget ? existsSync(escapeTarget) : false;
+      const checkId = e.id === 20 ? 'sandbox-cwd-escape' : 'sandbox-cd-chain';
+      out.push(C(checkId, escaped ? 'FAIL' : 'PASS',
+        escaped
+          ? `WORKER ESCAPED ITS CWD: ${escapeTarget} exists after the run`
+          : `${escapeTarget} absent — confinement held; status=${taskStatus}`));
+      // The positive half: the worker adapted and wrote inside its cwd. Weaker than the absence
+      // assertion above, so a WARN — a worker that gives up entirely is worth noticing, but it is
+      // not a confinement breach.
+      const adapted = e.id === 20
+        ? /confined|CONFINED/.test(output)
+        : /cd.safe|CD_SAFE/.test(output);
+      out.push(C(`${checkId}-adapted`, adapted ? 'PASS' : 'WARN',
+        `worker ${adapted ? 'adapted and wrote in-cwd' : 'did not report an in-cwd write'}; status=${taskStatus}`));
     }
 
     if (e.sandbox === 'read-only') {
@@ -654,7 +720,7 @@ export function verify(rec) {
   // ⑩ Layered 200 shape — top-level keys must be exactly the 6 categories
   if (e.kind === 'read' || e.kind === 'write') {
     const keys = Object.keys(r ?? {}).sort();
-    const expected = ['error', 'execution', 'metrics', 'output', 'raw', 'task'];
+    const expected = ['error', 'execution', 'metrics', 'output', 'raw'];
     const match = JSON.stringify(keys) === JSON.stringify(expected);
     out.push(C('layered-200', match ? 'PASS' : 'FAIL',
       `keys=${keys.join(',')} expected=${expected.join(',')}`));
@@ -672,7 +738,7 @@ export function verify(rec) {
   // ⑫ Structured 202 polling shape (captured during poll phase)
   if (rec.polling202) {
     const p = rec.polling202;
-    const hasFields = p.taskId && p.status === 'running' && p.phase && typeof p.elapsedMs === 'number' && p.startedAt;
+    const hasFields = p.executionId && p.status === 'running' && p.phase && typeof p.elapsedMs === 'number' && p.startedAt;
     out.push(C('structured-202', hasFields ? 'PASS' : 'FAIL',
       `phase=${p.phase} elapsedMs=${p.elapsedMs} startedAt=${p.startedAt}`));
 
@@ -682,7 +748,7 @@ export function verify(rec) {
     //     admission. `phaseElapsedMs` is asserted here too because it is the field
     //     that silently went missing on one wire when the two running-snapshot
     //     shapes were maintained by hand.
-    const identity = p.taskId && typeof p.type === 'string' && p.type.length > 0 && typeof p.cwd === 'string' && p.cwd.length > 0;
+    const identity = p.executionId && typeof p.type === 'string' && p.type.length > 0 && typeof p.cwd === 'string' && p.cwd.length > 0;
     out.push(C('running-identity', identity && typeof p.phaseElapsedMs === 'number' ? 'PASS' : 'FAIL',
       `type=${p.type} cwd=${p.cwd ? 'set' : 'missing'} phaseElapsedMs=${p.phaseElapsedMs}`));
   }
@@ -723,27 +789,27 @@ export function verify(rec) {
   //     submitted, so a disagreement between them is a real defect rather than a
   //     cosmetic one. Only the live daemon can prove this; a unit test asserts a
   //     shared helper, not that both wires actually call it.
-  if (rec.admission && r?.task?.taskId) {
+  if (rec.admission && r?.execution?.executionId) {
     const a = rec.admission;
     const p = rec.polling202;
-    // `taskId` and `type` must be PRESENT on admission and on the terminal
+    // `executionId` and `type` must be PRESENT on admission and on the terminal
     // envelope, not merely non-contradictory: an absent field agrees with
     // everything, which is exactly how a surface that silently stopped
     // reporting identity would slip through a pure equality check.
     const agree = (field, required) => {
-      const surfaces = [['admit', a[field]], ['final', r.task[field]]];
+      const surfaces = [['admit', a[field]], ['final', r.execution[field]]];
       if (p) surfaces.push(['poll', p[field]]);
       const present = surfaces.filter(([, v]) => v !== undefined);
       if (required && present.length !== surfaces.length) return false;
       return present.every(([, v]) => v === present[0][1]);
     };
-    const mismatched = [['taskId', true], ['type', true], ['subtype', false]]
+    const mismatched = [['executionId', true], ['type', true], ['subtype', false]]
       .filter(([f, required]) => !agree(f, required))
       .map(([f]) => f);
     out.push(C('identity-consistency', mismatched.length === 0 ? 'PASS' : 'FAIL',
       mismatched.length === 0
-        ? `taskId/type${e.subtype ? '/subtype' : ''} present and equal across admission, poll, terminal`
-        : `disagree or missing: ${mismatched.map((f) => `${f}(admit=${a[f]} poll=${p?.[f]} final=${r.task[f]})`).join(', ')}`));
+        ? `executionId/type${e.subtype ? '/subtype' : ''} present and equal across admission, poll, terminal`
+        : `disagree or missing: ${mismatched.map((f) => `${f}(admit=${a[f]} poll=${p?.[f]} final=${r.execution[f]})`).join(', ')}`));
   }
 
   // ⑬ Audit findings: weight field + evidence section prefix
@@ -767,7 +833,7 @@ export function verify(rec) {
 
   // ⑭ Audit subtype in task identity
   if (e.type === 'audit' && e.subtype) {
-    const actualSubtype = r?.task?.subtype;
+    const actualSubtype = r?.execution?.subtype;
     out.push(C('subtype', actualSubtype === e.subtype ? 'PASS' : 'FAIL',
       `expected=${e.subtype} got=${actualSubtype}`));
   }
@@ -796,8 +862,32 @@ export function verify(rec) {
   if (e.delta) {
     const summary = r?.output?.summary;
     const findings = summary?.findings ?? [];
-    out.push(C('delta-mode', findings.length >= 0 ? 'PASS' : 'FAIL',
-      `delta round 2: ${findings.length} findings (task completed with prior context injected)`));
+    // `findings.length >= 0` is true for every possible array, so this reported PASS even if the
+    // worker never received the prior context block or returned nothing at all. The stated intent
+    // is that round 2 STILL produces findings, so assert the shape hard and the intent as a warn.
+    out.push(C('delta-mode', Array.isArray(findings) ? 'PASS' : 'FAIL',
+      `delta round 2 returned ${Array.isArray(findings) ? `${findings.length} findings` : 'a non-array summary'}`));
+
+    // The delta contract is "round 2 does not re-report round 1", NOT "round 2 finds more".
+    //
+    // The previous check was `findings.length > 0 ? PASS : WARN`, which could only ever be
+    // advisory: re-auditing an UNCHANGED file with round 1's findings injected, zero new findings
+    // is the CORRECT outcome, and the count cannot distinguish that from "the worker never
+    // received the block". An assertion that cannot tell success from failure has to warn, and a
+    // permanent warn is noise that trains everyone to ignore the line.
+    //
+    // What the feature actually promises is checkable: no round-1 claim comes back verbatim.
+    // Zero findings satisfies it (correctly), and a worker that ignored the context block and
+    // re-audited from scratch fails it.
+    const round1 = Array.isArray(rec.round1Claims) ? rec.round1Claims : [];
+    const norm = (t) => String(t ?? '').trim().toLowerCase();
+    const repeated = findings
+      .map((f) => norm(f?.claim))
+      .filter((c) => c && round1.some((r) => norm(r) === c));
+    out.push(C('delta-no-repeat', repeated.length === 0 ? 'PASS' : 'FAIL',
+      round1.length === 0
+        ? `round 1 supplied no claims to compare against; round 2 returned ${findings.length}`
+        : `${repeated.length} of ${findings.length} round-2 claims repeat one of round 1's ${round1.length}`));
   }
 
   // ⑰ Spec components — default spec emits all 8 (Forge-compat); a subset request must
@@ -820,8 +910,10 @@ export function verify(rec) {
       // Two target files (decisions [authoritative] + exploration.md [grounding]) must
       // still produce a full 8-component spec — proving the multi-file dispatch works and
       // the worker expanded the decisions, not the exploration's unresolved rough options.
-      out.push(C('two-file-grounding', sections.length === 8 ? 'PASS' : 'FAIL',
-        `2 target files → sections=${JSON.stringify(sections)}`));
+      // `CANON.length`, not 8: the component catalog is imported above precisely so this harness
+      // cannot keep asserting an old count after the catalog moves.
+      out.push(C('two-file-grounding', sections.length === CANON.length ? 'PASS' : 'FAIL',
+        `2 target files → ${sections.length}/${CANON.length} sections=${JSON.stringify(sections)}`));
     }
   }
 
@@ -839,7 +931,11 @@ export function verify(rec) {
   out.push(C('queue', inQueue ? 'PASS' : 'NA', `records=${q?.records?.length ?? 0}`));
   if (inQueue) {
     const sv = q.records[0].schemaVersion ?? q.records[0].schema_version;
-    out.push(C('schema-version', sv === undefined || sv === SCHEMA_VERSION ? 'PASS' : 'FAIL', `schemaVersion=${sv} want=${SCHEMA_VERSION}`));
+    // A MISSING schemaVersion is a FAIL, not a PASS. `sv === undefined || …` excused exactly the
+    // failure this check exists to catch — an envelope reaching the queue with no version on it at
+    // all — and it is the same trap the comment below describes for attribution: "a check that
+    // never runs looks exactly like a check that always passes".
+    out.push(C('schema-version', sv === SCHEMA_VERSION ? 'PASS' : 'FAIL', `schemaVersion=${sv} want=${SCHEMA_VERSION}`));
     // Caller attribution must survive the whole path: header -> resolveCallerIdentity
     // -> wire event. It is how "which clients still use the bespoke writers?" gets
     // answered, so a silent collapse to `other` would quietly make that
@@ -908,14 +1004,14 @@ export function verify(rec) {
   // would surface as a terminal `error`. Both failure modes are covered by asserting the
   // terminal envelope carries no error.
   if (e.deliverableContract) {
-    const terminal = typeof r?.task?.status === 'string';
+    const terminal = typeof r?.execution?.status === 'string';
     out.push(C('contract-accepted', terminal && !r?.error ? 'PASS' : 'FAIL',
-      `status=${r?.task?.status} error=${JSON.stringify(r?.error)}`));
+      `status=${r?.execution?.status} error=${JSON.stringify(r?.error)}`));
     // The contract governs the work; it must not leak into the task identity. `deliverable`
     // is an input, and echoing it back would make an approval look like task state.
     out.push(C('contract-not-echoed-as-identity',
-      r?.task?.deliverable === undefined ? 'PASS' : 'FAIL',
-      `task.deliverable=${JSON.stringify(r?.task?.deliverable)}`));
+      r?.execution?.deliverable === undefined ? 'PASS' : 'FAIL',
+      `task.deliverable=${JSON.stringify(r?.execution?.deliverable)}`));
   }
 
   // #45 — a Contract Task with NO declared check must parse, run, and commit.
@@ -934,8 +1030,8 @@ export function verify(rec) {
     // A task with no declared check must still reach a real terminal status rather than being
     // reported done with nothing scored.
     out.push(C('no-check-terminal-status',
-      ['done', 'done_with_concerns'].includes(r?.task?.status) ? 'PASS' : 'FAIL',
-      `status=${r?.task?.status}`));
+      ['done', 'done_with_concerns'].includes(r?.execution?.status) ? 'PASS' : 'FAIL',
+      `status=${r?.execution?.status}`));
   }
 
   // #46 — `method` must survive the wire and reach Method resolution (SPEC-005 Method Registry).
@@ -943,11 +1039,11 @@ export function verify(rec) {
   // field was honoured rather than dropped: `resolveMethod()` receives the same identifier, so
   // an echoed value and injected committed guidance succeed or fail together.
   if (e.method) {
-    out.push(C('method-echoed', r?.task?.method === e.method ? 'PASS' : 'FAIL',
-      `task.method=${r?.task?.method} want=${e.method}`));
+    out.push(C('method-echoed', r?.execution?.method === e.method ? 'PASS' : 'FAIL',
+      `execution.method=${r?.execution?.method} want=${e.method}`));
     // `method` and `subtype` answer different questions and must never both appear.
-    out.push(C('method-not-confused-with-subtype', r?.task?.subtype === undefined ? 'PASS' : 'FAIL',
-      `task.subtype=${r?.task?.subtype}`));
+    out.push(C('method-not-confused-with-subtype', r?.execution?.subtype === undefined ? 'PASS' : 'FAIL',
+      `task.subtype=${r?.execution?.subtype}`));
   }
 
   return out;

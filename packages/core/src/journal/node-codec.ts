@@ -25,7 +25,17 @@ export interface JournalNodeDocument {
   sourcePath: string;
 }
 
-const ID_RE = /^\d{4}$/;
+// FOUR OR MORE digits, zero-padded to at least four.
+//
+// This was `/^\d{4}$/`, a hard ceiling at 10,000 nodes that failed by CORRUPTION rather than by
+// error: `allocateNextNodeId` returned `"10000"` past 9999, this regex rejected it, and
+// `coerceNodeId` fell through to the filename — where `([0-9]{4})-` matched the last four digits
+// of `10000-slug.md` and produced `"0000"`, the id of the very first node. The collision then
+// repeated forever, because `allocateNextNodeId` re-derived its maximum from a set that no longer
+// contained 10000. Links resolved to the wrong node and the index keyed two nodes to one row.
+//
+// Widening is backward-compatible: every id ever written is four digits and still matches.
+const ID_RE = /^\d{4,}$/;
 // Accept a trailing `Z` (UTC) OR a `±HH:MM` timezone offset. Legacy nodes were
 // written with offset timestamps (e.g. `2026-07-18T18:48:29+08:00`); the renderer
 // still writes the canonical `Z` form.
@@ -53,16 +63,16 @@ export function slugifyTopic(raw: string): string {
   return slug.length > 0 ? slug : 'unscoped';
 }
 
-// Resolve a node's canonical 4-digit id. A quoted frontmatter id is authoritative;
+// Resolve a node's canonical id (four digits, or more once the corpus passes 9,999). A quoted frontmatter id is authoritative;
 // otherwise fall back to the filename prefix (renderNodeFilename writes `<id>-<slug>.md`,
 // so the leading 4 digits ARE the id) — this recovers nodes whose unquoted `id: 0012`
 // YAML-parsed to a number (octal/int) and would otherwise throw. Numeric coercion is a
 // last resort only when the path carries no prefix.
 function coerceNodeId(rawId: unknown, sourcePath: string): string {
   if (typeof rawId === 'string' && ID_RE.test(rawId.trim())) return rawId.trim();
-  const fromFilename = sourcePath.match(/([0-9]{4})-[^/]*$/)?.[1];
+  const fromFilename = sourcePath.match(/(?:^|\/)([0-9]{4,})-[^/]*$/)?.[1];
   if (fromFilename) return fromFilename;
-  if (typeof rawId === 'number' && Number.isInteger(rawId) && rawId >= 0 && rawId <= 9999) {
+  if (typeof rawId === 'number' && Number.isInteger(rawId) && rawId >= 0) {
     return String(rawId).padStart(4, '0');
   }
   throw new Error('Invalid id');

@@ -25,6 +25,9 @@ function fakeProvider(result: { errorCode: string; errorMessage: string }): Prov
           filesWritten: [],
           usedShell: false,
           toolCalls: [],
+          // A mock has no sandbox hook to count with; `null` is "not measured here", which is what
+          // codex reports for the same reason. `0` would claim the worker was observed and behaved.
+          sandboxDenialCount: null,
         };
       },
       async close() {},

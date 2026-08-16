@@ -11,22 +11,17 @@ import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
 import { boot, type HarnessHandle } from '../fixtures/harness.js';
 import { mockProvider } from '../fixtures/mock-providers.js';
-import { TASK_TYPES, INITIATIVE_OPERATIONS, canonicalContractDigest } from '@zhixuan92/multi-model-agent-core';
+import { TASK_TYPES, canonicalContractDigest } from '@zhixuan92/multi-model-agent-core';
+import { EXPECTED_MCP_TOOL_NAMES } from '../fixtures/expected-mcp-tools.js';
 
 /** Task I-7: one `mma_<operation>` tool per frozen Initiative operation, added
  *  alongside the original seven. Derived from the same frozen operation list
  *  the tool surface itself is built from, so this assertion tracks the real
  *  contract rather than a hand-copied name list.
  *
- *  SPEC-005 Method Registry (Task I-3, FR-10) froze `method_get`, `method_list`, and
- *  `initiative_task_set_method` as `mma_initiative_<operation>` rather than the mechanical
- *  `mma_<operation>` every other operation uses — see tool-surface.ts's own
- *  `INITIATIVE_TOOL_NAME_OVERRIDES`. Encoded independently here (not imported) so this
- *  assertion still catches a real naming regression in the tool surface. */
-const INITIATIVE_TOOL_NAME_OVERRIDES = new Set(['method_get', 'method_list', 'initiative_task_set_method']);
-const INITIATIVE_TOOL_NAMES = INITIATIVE_OPERATIONS.map((operation) =>
-  INITIATIVE_TOOL_NAME_OVERRIDES.has(operation) ? `mma_initiative_${operation}` : `mma_${operation}`,
-);
+ *  The naming rule (including SPEC-005's three `mma_initiative_<operation>` overrides) is
+ *  restated in `../fixtures/expected-mcp-tools.js` — independent of `tool-surface.ts`, so a real
+ *  naming regression still fails, but in ONE place rather than copied into three test files. */
 
 async function mcpClient(h: HarnessHandle): Promise<Client> {
   const transport = new StreamableHTTPClientTransport(new URL(`${h.baseUrl}/mcp`), {
@@ -62,24 +57,22 @@ describe('contract: MCP adapter', () => {
     const client = await mcpClient(h);
     try {
       const { tools } = await client.listTools();
-      expect(tools.map((t) => t.name).sort()).toEqual([
-        'mma_context_block_create', 'mma_context_block_delete', 'mma_run',
-        'mma_execution_cancel', 'mma_execution_get', 'mma_execution_list', 'mma_execution_wait',
-        ...INITIATIVE_TOOL_NAMES,
-      ].sort());
+      expect(tools.map((t) => t.name).sort()).toEqual(EXPECTED_MCP_TOOL_NAMES);
 
       const run = tools.find((t) => t.name === 'mma_run')!;
       const schema = run.inputSchema as {
-        required: string[];
-        properties: Record<string, unknown> & { request: { oneOf?: unknown[]; anyOf?: unknown[] } };
+        [x: string]: unknown;
+        required?: string[];
+        properties?: { [x: string]: unknown; request?: { oneOf?: unknown[]; anyOf?: unknown[] } };
       };
+      expect(schema.properties).toBeDefined();
       // No `mainModel` on the wire. The cost baseline is the daemon's configured
       // `agents.main` tier, so the caller carries nothing for it.
       expect(schema.required).toEqual(['cwd', 'request']);
-      expect(Object.keys(schema.properties)).not.toContain('mainModel');
+      expect(Object.keys(schema.properties!)).not.toContain('mainModel');
       // The request schema is the SAME discriminated union REST validates with:
       // one variant per task type, generated — never a hand-written copy.
-      const variants = (schema.properties.request.oneOf ?? schema.properties.request.anyOf) as Array<{
+      const variants = (schema.properties!.request!.oneOf ?? schema.properties!.request!.anyOf) as Array<{
         properties: { type: { const?: string; enum?: string[] } };
       }>;
       const variantTypes = variants
@@ -233,6 +226,43 @@ describe('contract: MCP adapter', () => {
       expect(elsewhere).toEqual({ executions: [], count: 0 });
 
       await client.callTool({ name: 'mma_execution_cancel', arguments: { executionId: run.executionId } });
+    } finally { await client.close(); await h.close(); }
+  });
+
+  /**
+   * `additionalProperties: false` is advertised on EVERY tool's inputSchema, and was enforced
+   * on none of them: each handler reads the keys it knows off a `Record<string, unknown>` and
+   * ignores the rest. So `mma_run` accepted `{ cwd, request, wat: 'nonsense' }` and ran the
+   * task, and a caller who put an option at the wrong nesting level — `reviewPolicy` beside
+   * `request` rather than inside it — got a run with the option silently dropped and no way to
+   * tell from the result. A schema the server publishes and does not honour is worse than no
+   * schema: it is a promise the caller has every reason to rely on.
+   */
+  it('refuses an unknown argument on every tool, as each tool schema advertises', async () => {
+    const h = await boot({ provider: mockProvider({ stage: 'ok' }), cwd: process.cwd() });
+    const client = await mcpClient(h);
+    try {
+      const run = await client.callTool({
+        name: 'mma_run',
+        arguments: { cwd: process.cwd(), request: { type: 'investigate', prompt: 'x' }, wat: 'nonsense' },
+      });
+      expect(run.isError).toBe(true);
+      const payload = parseText(run) as { error: { code: string; message: string } };
+      expect(payload.error.code).toBe('invalid_request');
+      // Name the offending key: "unknown argument" alone leaves the caller diffing their call
+      // against the schema by hand.
+      expect(payload.error.message).toContain('wat');
+
+      // Not special-cased to mma_run — the rule comes from each tool's own declared schema.
+      const get = await client.callTool({
+        name: 'mma_execution_get', arguments: { executionId: 'abc', timeoutMs: 5 },
+      });
+      expect(get.isError).toBe(true);
+      expect((parseText(get).error as { message: string }).message).toContain('timeoutMs');
+
+      // A DECLARED optional argument is still accepted — the check must not reject the schema.
+      const listed = await client.callTool({ name: 'mma_execution_list', arguments: { cwd: process.cwd() } });
+      expect(listed.isError).toBeFalsy();
     } finally { await client.close(); await h.close(); }
   });
 

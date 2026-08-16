@@ -355,12 +355,28 @@ export class ExecutionStore {
     return res.changes > 0;
   }
 
-  /** Drop terminal rows past their retention TTL. Returns rows removed. */
+  /**
+   * Drop terminal execution rows past their retention TTL, and CONSUMED outbox rows past the
+   * same window. Returns execution rows removed.
+   *
+   * The outbox half was missing. `listUnconsumedOutbox` is the only reader and it filters
+   * consumed rows out, so a consumed row is read by nothing — yet nothing deleted them either,
+   * so every linked Execution left one permanent row in a file that is never vacuumed. Bounded
+   * here rather than at consumption time so a replay that has just marked a row still leaves a
+   * forensic window equal to the one terminal executions get.
+   *
+   * UNCONSUMED rows are deliberately never pruned, however old: the row IS the durable promise
+   * that a linked Initiative still needs its terminal replay, and its payload carries everything
+   * that replay needs, so it survives its execution row being pruned.
+   */
   pruneExpired(now = Date.now()): number {
     if (this.closed) return 0;
     const res = this.db.prepare(
       `DELETE FROM executions WHERE terminal_at IS NOT NULL AND expires_at < ?`,
     ).run(now);
+    this.db.prepare(
+      `DELETE FROM outbox WHERE consumed_at IS NOT NULL AND consumed_at < ?`,
+    ).run(now - this.ttlMs);
     return Number(res.changes);
   }
 

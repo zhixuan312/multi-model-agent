@@ -2,23 +2,7 @@
   "schemaVersion": 2,
   "kinds": [
     {
-      "kind": "server_started",
-      "provider_events": []
-    },
-    {
-      "kind": "server_stopped",
-      "provider_events": []
-    },
-    {
       "kind": "batch_created",
-      "provider_events": []
-    },
-    {
-      "kind": "request_received",
-      "provider_events": []
-    },
-    {
-      "kind": "request_spilled",
       "provider_events": []
     },
     {
@@ -31,18 +15,6 @@
     },
     {
       "kind": "batch_cancelled",
-      "provider_events": []
-    },
-    {
-      "kind": "project_evicted",
-      "provider_events": []
-    },
-    {
-      "kind": "stall_watchdog_armed",
-      "provider_events": []
-    },
-    {
-      "kind": "stall_watchdog_fired",
       "provider_events": []
     },
     {
@@ -70,10 +42,6 @@
         "codex_agent_message",
         "codex_file_change"
       ]
-    },
-    {
-      "kind": "server_error",
-      "provider_events": []
     }
   ]
 }

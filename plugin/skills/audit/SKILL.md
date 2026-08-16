@@ -77,7 +77,7 @@ The legacy `auditType` field and its `correctness` / `style` / `general` / `secu
 When `subtype: 'plan'`:
 
 - **`cwd` = the target repo** (the codebase the plan will be executed against). **`target.paths` = the plan file** (which may live outside the target repo, e.g. `.mma/plans/2026-01-15-<slug>.md`). The worker greps and reads source files under `cwd` to verify the plan's claims. If `cwd` points at the wrong directory, the worker searches the wrong codebase and produces false findings.
-- `target.paths` MUST contain exactly **one entry** — the plan markdown. Sending zero or 2+ entries → `400 invalid_request` with the message: *"Plan audit takes exactly one filePath (the plan markdown). The worker discovers and verifies source files itself via its tool surface — do not pre-list source files."*
+- Pass exactly **one entry** in `target.paths` — the plan markdown. This is not enforced: `audit` has no preprocessor, so 2+ entries are ACCEPTED and the worker audits every file as though it were a plan, spending its criteria loop on source files and returning findings about them. Nothing in the response marks the run as degraded. The worker discovers and verifies source files itself via its tool surface — do not pre-list them. (Zero entries is rejected, by the exactly-one-of `paths`/`inline` rule rather than by any plan-specific check.)
 - `target.inline` (inline content) is not used in plan mode — the plan must be on disk so the worker can read it.
 - The worker runs the sequential-criteria loop with the plan-audit criteria set across 12 perspectives in three groups: **EXTERNAL CODEBASE COHERENCE** (1 PATH EXISTENCE, 2 SYMBOL EXISTENCE, 3 SIGNATURE MATCH, 4 IMPORT GRAPH, 5 TEST HARNESS AVAILABILITY, 6 STEP SEQUENCE WITHIN TASK, 7 CROSS-TASK DEPENDENCIES, 8 VERIFICATION COMMAND VALIDITY), **INTRA-PLAN STRUCTURE** (9 TASK GRANULARITY, 11 PLACEHOLDER LANGUAGE, 12 PLAN SKELETON), and **SPEC ALIGNMENT** (10 SPEC COVERAGE).
 - To enable perspective 10 (SPEC COVERAGE), register the upstream spec as a context block via `mma:context-blocks` and pass its `blockId` in `contextBlockIds`. Without a spec in context, perspective 10 emits "No findings for this criterion." and the other 11 still run.
@@ -128,7 +128,25 @@ tasks return a handle instead:
 { "executionId": "<uuid>", "type": "<route>", "cwd": "<abs path>" }
 ```
 
-Use `executionId` to poll with `mma_execution_get` / `mma_execution_wait`.
+Use `executionId` to poll with `mma_execution_get`, block with `mma_execution_wait`, or stop the
+work with `mma_execution_cancel`.
+
+### A long dispatch outlives your turn; your polling does not
+
+The execution runs in the mma daemon, not in your session. It keeps going regardless of what your
+side is doing, and its terminal envelope is persisted — `mma_execution_get` returns it later even
+after a daemon restart. **Nothing is lost if you stop watching.**
+
+What stops is your polling. `mma_execution_wait` blocks for at most its timeout and then returns a
+running snapshot; "call again" only happens while your turn is active. Your client is never told
+that an mma execution finished — the execution belongs to the daemon, not to your client's own task
+tracking — so no notification will arrive to bring you back.
+
+For work that outlasts a turn, hand the waiting to something your client DOES track. If it can run
+a command as a tracked background job, wrap the poll in one: a job that blocks until the execution
+is terminal and whose exit your client notices. Completion then re-enters your session instead of
+depending on you still being mid-turn. Without that, a long dispatch looks stalled while it is in
+fact running — and the result is sitting in the store whenever you next ask for it.
 
 ### mma_execution_get / mma_execution_wait — poll
 
@@ -142,7 +160,7 @@ full envelope — these 5 top-level fields:
     "executionId": "<uuid>",
     "type": "<route>",
     "subtype": "<subtype or absent>",
-    "status": "completed | done_with_concerns | failed | cancelled",
+    "status": "done | done_with_concerns | failed | cancelled | interrupted",
     "sessions": { "implementer": "<session-id>", "reviewer": "<session-id or null>" },
     "worktree": null,
     "dirtyAtDispatch": false
@@ -181,6 +199,11 @@ live in a distinct `execution` block (`sessions`, `worktree`, `dirtyAtDispatch`)
 | `error` is `null` | Task succeeded — read `output` |
 | `error` is `{ "code": "...", "message": "..." }` | Task failed — read `error.code` + `error.message` |
 
+`interrupted` is the fifth terminal status: boot reconciliation writes it when a daemon restart
+orthaned a running execution. It carries a non-null `error` with a retryable reason
+(`daemon_restarted`), so Step 1 still reads correctly — but a consumer switching on only the other
+four hits an unhandled state after any restart.
+
 **Step 2 — extract the result from `output.summary`:**
 
 `output.summary` is the **parsed JSON** from the refiner (reviewer). Its internal shape varies by route — see the per-skill "Reading the output" section for the exact fields. Common patterns:
@@ -208,7 +231,9 @@ response.output.summary.findings[i].suggestion  ← fix recommendation (some rou
 
 ```
 response.output.filesChanged       ← array of relative paths modified by the worker
-response.output.contextBlockId     ← non-null for read routes (reusable in contextBlockIds)
+response.output.contextBlockId     ← non-null for READ-ONLY types (audit/review/debug/investigate/
+                                     research/journal_recall); null for spec and plan too, which
+                                     read but are cwd-only (reusable in contextBlockIds)
 ```
 
 **Step 5 — check `output.reviewerNote` (reviewer availability):**
@@ -294,7 +319,7 @@ Anti-pattern alert: **`parallel-rounds-same-target`** (AP1). Three parallel audi
 The auditor lacks codebase context (no type info, no call-site lookup, no test awareness). Findings are speculative. **Fix:** use `mma:review` — it pulls in surrounding source context and validates against the actual types.
 
 ❌ **Single huge `target.inline` string instead of `target.paths`**
-Inline docs lose the file boundary, so the per-file parallel split degenerates to one worker. **Fix:** save to disk first, pass `target.paths`.
+Inline content arrives as one undifferentiated blob, so the worker cannot cite a path in its findings and you cannot re-audit one file of the set. **Fix:** save to disk first, pass `target.paths`. One dispatch is always one worker, so this costs citation quality, not concurrency.
 
 ❌ **Sending the legacy `auditType` field**
 The field was renamed to `subtype` and the value set was narrowed. **Fix:** use `subtype` with one of `default` / `plan` / `spec` / `skill`. For "security only" / "performance only" lenses, put the bias in the free-text prompt — there is no narrow-lens subtype.
@@ -304,7 +329,7 @@ Round 2 worker has no idea what round 1 found. **Fix:** register the round 1 fin
 
 ## Terminal context block
 
-Every completed **read-route** task (audit / review / debug / investigate / research) auto-registers a reusable terminal context block containing its report (headline + findings). The block id is returned on the result as **`contextBlockId`**. Write routes (delegate / execute-plan) return `contextBlockId: null` — their record is the commit, not a block. This block is immutable, lives for the session duration, and counts against the project's `maxEntries` quota (default 500).
+Every completed **read-only** task — audit / review / debug / investigate / research / **journal_recall** — auto-registers a reusable terminal context block containing its report (headline + findings). The block id is returned on the result as **`contextBlockId`**. Every other type returns `contextBlockId: null` — including `spec` and `plan`, which read rather than write but are `cwd-only` because they write their document — their record is the commit, not a block. This block is immutable, lives for the session duration, and counts against the project's `server.limits.maxContextBlocksPerProject` quota (default 500).
 
 Use it for delta follow-ups — feed prior results' block ids into a later call's `contextBlockIds`, filtering out nulls:
 

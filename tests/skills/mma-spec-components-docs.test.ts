@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { readFileSync } from 'node:fs';
+import { SPEC_COMPONENT_CATALOG } from '@zhixuan92/multi-model-agent-core';
 
 describe('mma-spec SKILL.md: subset components contract', () => {
   const skillMd = readFileSync('packages/server/src/skills/mma-spec/SKILL.md', 'utf8');
@@ -8,15 +9,21 @@ describe('mma-spec SKILL.md: subset components contract', () => {
     expect(skillMd).toContain('| `components` | string[] | no |');
   });
 
-  it('lists the exact allowed canonical labels', () => {
-    expect(skillMd).toContain('Context');
-    expect(skillMd).toContain('Problem');
-    expect(skillMd).toContain('Goals & Requirements');
-    expect(skillMd).toContain('Alternatives');
-    expect(skillMd).toContain('Technical Design');
-    expect(skillMd).toContain('Testing Plan');
-    expect(skillMd).toContain('Risks & Mitigations');
-    expect(skillMd).toContain('User Stories & Tasks');
+  /**
+   * Against the catalog, and against the LINE that declares them — not `toContain` over the whole
+   * file. Eight `expect(skillMd).toContain('<label>')` calls stood here under the name "the exact
+   * allowed canonical labels": `Context`, `Problem` and `Alternatives` occur throughout ordinary
+   * prose in this document, so those three passed no matter what the allowed set said, and the
+   * set itself was a ninth copy of a list `SPEC_COMPONENT_CATALOG` already owns.
+   */
+  it('declares exactly the catalog identifiers as the allowed labels', () => {
+    const line = skillMd.split('\n').find((l) => l.includes('Allowed labels:'));
+    expect(line, 'no "Allowed labels:" line in the components row').toBeDefined();
+
+    const declared = [...line!.matchAll(/`([^`]+)`/g)]
+      .map((m) => m[1]!)
+      .filter((label) => label !== 'components');
+    expect(declared).toEqual(SPEC_COMPONENT_CATALOG.map((entry) => entry.id));
   });
 
   it('states that omitted or empty components means all eight components', () => {

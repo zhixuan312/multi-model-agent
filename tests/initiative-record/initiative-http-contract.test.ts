@@ -17,7 +17,7 @@ describe('Initiative HTTP contract', () => {
       });
       expect(created.status).toBe(200);
       const product = await created.json() as { uuid: string };
-      const invalid = await fetch(`${h.baseUrl}/initiatives`, { method: 'POST', headers: headers(h.token), body: JSON.stringify({ operation: 'initiative_resume', initiative: { uuid: product.uuid, human_key: 'MMA-INIT-1' } }) });
+      const invalid = await fetch(`${h.baseUrl}/initiatives`, { method: 'POST', headers: headers(h.token), body: JSON.stringify({ operation: 'initiative_resume', input: { initiative: { uuid: product.uuid, human_key: 'MMA-INIT-1' } } }) });
       expect(invalid.status).toBe(400);
       expect((await invalid.json()).error.code).toBe('invalid_request');
     } finally { await h.close(); }

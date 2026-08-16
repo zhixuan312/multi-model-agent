@@ -14,14 +14,3 @@ export const DEFAULT_EFFORT: Effort = 'high';
 export type CostTier = 'free' | 'low' | 'medium' | 'high';
 export type WorkerStatus = 'done' | 'done_with_concerns' | 'needs_context' | 'blocked' | 'review_loop_capped' | 'failed';
 
-export interface TaskSpec {
-  prompt: string
-  agentType?: AgentType
-  done?: string
-  contextBlockIds?: string[]
-  timeoutMs?: number
-  cwd?: string
-  reviewPolicy?: 'reviewed' | 'none'
-  skills?: string[]
-  subtype?: string
-}

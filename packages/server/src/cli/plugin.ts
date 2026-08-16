@@ -4,7 +4,6 @@
 // registration. The output is a build artifact regenerated from the packaged
 // skills; see plugin/build-plugin.ts for why no auth token is written into it.
 
-import * as os from 'node:os';
 import * as path from 'node:path';
 import minimist from 'minimist';
 import { buildPlugin, PLUGIN_NAME, PLUGIN_TARGETS, type PluginTarget } from '../plugin/build-plugin.js';
@@ -106,7 +105,3 @@ export function runPlugin(deps: PluginCliDeps): number {
   return 0;
 }
 
-/** Default home dir helper so index.ts stays terse. */
-function defaultHomeDir(): string {
-  return os.homedir();
-}

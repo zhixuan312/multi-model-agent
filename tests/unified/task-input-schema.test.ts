@@ -109,8 +109,12 @@ describe('taskInputSchema', () => {
   });
 
   it('rejects investigate with deprecated question field', () => {
+    // `prompt` is present so the RETIRED key is the only thing left to reject. Without it the
+    // payload also fails "prompt is required", and the assertion passes whether or not `question`
+    // is still accepted — a test that cannot notice the regression it was written to catch.
     expect(taskInputSchema.safeParse({
       type: 'investigate',
+      prompt: 'How does auth work?',
       question: 'How does auth work?',
     }).success).toBe(false);
   });
@@ -140,7 +144,7 @@ describe('taskInputSchema', () => {
   it('rejects execute_plan with deprecated taskDescriptors', () => {
     expect(taskInputSchema.safeParse({
       type: 'execute_plan',
-      filePaths: ['/plan.md'],
+      target: { paths: ['/plan.md'] },
       taskDescriptors: ['Task 1'],
     }).success).toBe(false);
   });
@@ -155,6 +159,7 @@ describe('taskInputSchema', () => {
   it('rejects research with deprecated researchQuestion', () => {
     expect(taskInputSchema.safeParse({
       type: 'research',
+      prompt: 'What are the best practices for X in the industry?',
       researchQuestion: 'What?',
       background: 'Some context for the question here.',
     }).success).toBe(false);
@@ -232,6 +237,7 @@ describe('taskInputSchema', () => {
   it('rejects journal_recall with deprecated query', () => {
     expect(taskInputSchema.safeParse({
       type: 'journal_recall',
+      prompt: 'What did we learn about caching?',
       query: 'caching?',
     }).success).toBe(false);
   });
@@ -368,9 +374,40 @@ describe('taskInputSchema', () => {
     }).success).toBe(false);
   });
 
+  it('carries EVERY common field through the legacy journal_record normalization', () => {
+    // The legacy `{ prompt, topic }` body is rewritten to `{ records: [...] }` at the boundary, and
+    // the fields allowed alongside it were a hand-written list that had already drifted: SPEC-005
+    // added `method` to commonFields and to that list; SPEC-003 added `initiative` and did not. So
+    // a legacy body carrying `method` normalized, and the same body carrying `initiative` was
+    // rejected as `unrecognized_keys` — even though linked admission is documented as available on
+    // every task type. Asserted per common field so a NEW one cannot be forgotten here either.
+    const values: Record<string, unknown> = {
+      agentTier: 'complex',
+      reviewPolicy: 'reviewed',
+      sessionIds: { implementer: 'sess-1' },
+      contextBlockIds: ['blk-1'],
+      initiative: { initiative: { uuid: '11111111-1111-4111-8111-111111111111' }, authorized_by: 'host-a' },
+      method: 'software-change@1',
+    };
+    for (const [field, value] of Object.entries(values)) {
+      const parsed = taskInputSchema.safeParse({ type: 'journal_record', prompt: 'a learning', [field]: value });
+      expect(parsed.success, `legacy journal_record must accept ${field}`).toBe(true);
+      if (parsed.success) {
+        expect((parsed.data as Record<string, unknown>)[field], `${field} must survive normalization`).toEqual(value);
+        expect((parsed.data as { records: unknown[] }).records).toEqual([{ prompt: 'a learning' }]);
+      }
+    }
+  });
+
+  it('still rejects an unknown key alongside a legacy journal_record body', () => {
+    // Deriving the allowed set must not turn the normalizer into a passthrough.
+    expect(taskInputSchema.safeParse({ type: 'journal_record', prompt: 'x', bogus: 1 }).success).toBe(false);
+  });
+
   it('rejects journal_record with deprecated entry', () => {
     expect(taskInputSchema.safeParse({
       type: 'journal_record',
+      prompt: 'We decided to use Redis for caching because...',
       entry: 'learning',
     }).success).toBe(false);
   });
@@ -392,6 +429,7 @@ describe('taskInputSchema', () => {
   it('rejects review with deprecated code field', () => {
     expect(taskInputSchema.safeParse({
       type: 'review',
+      target: { paths: ['/src/main.ts'] },
       code: 'const x = 1;',
     }).success).toBe(false);
   });
@@ -414,6 +452,7 @@ describe('taskInputSchema', () => {
   it('rejects debug with deprecated errorMessage', () => {
     expect(taskInputSchema.safeParse({
       type: 'debug',
+      prompt: 'TypeError: cannot read property verify of undefined',
       errorMessage: 'TypeError',
     }).success).toBe(false);
   });

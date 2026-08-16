@@ -85,8 +85,10 @@ export async function getClientInventory(deps: InventoryDeps): Promise<ClientInv
   for (const entry of roster) {
     const capability = capabilities.find((candidate) => candidate.id === entry.clientId);
     if (!capability) continue;
-    const effectiveState = entry.effectiveState === 'suggested' ? 'suggested' : entry.effectiveState;
-    records.push(computeClientStatus(deps, capability, effectiveState));
+    // `entry.effectiveState` is already exactly `'on' | 'off' | 'suggested'`, the parameter type.
+    // This used to route through `x === 'suggested' ? 'suggested' : x` — an identity ternary that
+    // read as a narrowing step and performed none.
+    records.push(computeClientStatus(deps, capability, entry.effectiveState));
   }
   return records;
 }

@@ -46,6 +46,12 @@ export const clampFilesWrittenCount = (n: number): number =>
 export const clampTurnCount = (n: number): number =>
   Math.min(Math.max(0, n), 250);
 
+/** The wire caps `concernCount` at 150. Unclamped, a reviewer that raised more
+ *  failed the schema parse and the uploader dropped the ENTIRE event — the one
+ *  outcome worse than an inaccurate count. */
+export const clampConcernCount = (n: number): number =>
+  Math.min(Math.max(0, n), 150);
+
 export const clampDurationMsStage = (n: number): number =>
   Math.min(Math.max(0, n), 3_600_000);
 
@@ -71,32 +77,60 @@ export function normalizeModel(rawModelId: string): { canonical: string; family:
 }
 
 // === status mapping per spec ===
+/**
+ * Project an envelope status + failure code onto the wire's `terminalStatus` / `workerStatus`.
+ *
+ * Every failure used to report `terminalStatus: 'error'`. The switch had seven more cases —
+ * `incomplete`, `brief_too_vague`, `needs_context`, `blocked`, `review_loop_capped` and friends —
+ * and not one was reachable: they are the RETIRED lifecycle vocabulary, and nothing has set
+ * `structuredError.code` to any of them since that layer was removed. A test called itself
+ * "exhaustive" and covered all ten branches, which is exactly why the dead ones looked alive: it
+ * proved the function maps X to Y, never that anything produces X.
+ *
+ * v7 keeps only reachable outputs and splits three that matter operationally, because "the failure
+ * rate went up" is unactionable when a wall-clock timeout, an unreachable provider and a user
+ * hitting cancel are all filed as the same word:
+ *
+ *   - `timeout`     — the run hit its wall clock. A budget question.
+ *   - `unavailable` — the provider could not be reached or authenticated. An infrastructure fact
+ *                     about the operator's environment, not a statement about the engine.
+ *   - `cancelled`   — the caller aborted it. Not a failure at all, and counting it as one made
+ *                     every interactive session look unreliable.
+ *
+ * Anything else stays `error`.
+ */
+
+/** Provider/pipeline codes that mean "we never got to run", not "the work went wrong". */
+const UNAVAILABLE_CODES = new Set([
+  'missing_credentials',
+  'invalid_api_key',
+  'codex_not_installed',
+  'spawn_failed',
+  'sdk_no_result',
+]);
+
 export function mapStatusToWire(
   status: TaskEnvelope['status'],
   errCode: string | null,
-): { terminalStatus: string; workerStatus: string } {
+  wasCancelled = false,
+): {
+  terminalStatus: 'ok' | 'timeout' | 'error' | 'unavailable' | 'cancelled';
+  workerStatus: 'done' | 'done_with_concerns' | 'failed' | 'cancelled';
+} {
+  // Checked before status: a cancel usually lands as a `failed` pipeline with an
+  // `aborted` code, and reading the code alone cannot tell a caller-initiated
+  // abort from the engine giving up.
+  if (wasCancelled) return { terminalStatus: 'cancelled', workerStatus: 'cancelled' };
   if (status === 'done') return { terminalStatus: 'ok', workerStatus: 'done' };
-  if (status === 'done_with_concerns')
+  if (status === 'done_with_concerns') {
     return { terminalStatus: 'ok', workerStatus: 'done_with_concerns' };
-  // failed:
-  switch (errCode) {
-    case 'incomplete':
-      return { terminalStatus: 'incomplete', workerStatus: 'failed' };
-    case 'timeout':
-      return { terminalStatus: 'timeout', workerStatus: 'failed' };
-    case 'brief_too_vague':
-      return { terminalStatus: 'brief_too_vague', workerStatus: 'failed' };
-    case 'unavailable':
-      return { terminalStatus: 'unavailable', workerStatus: 'failed' };
-    case 'needs_context':
-      return { terminalStatus: 'incomplete', workerStatus: 'needs_context' };
-    case 'blocked':
-      return { terminalStatus: 'incomplete', workerStatus: 'blocked' };
-    case 'review_loop_capped':
-      return { terminalStatus: 'incomplete', workerStatus: 'review_loop_capped' };
-    default:
-      return { terminalStatus: 'error', workerStatus: 'failed' };
   }
+  if (errCode === 'aborted') return { terminalStatus: 'cancelled', workerStatus: 'cancelled' };
+  if (errCode === 'wall_clock_exceeded') return { terminalStatus: 'timeout', workerStatus: 'failed' };
+  if (errCode !== null && UNAVAILABLE_CODES.has(errCode)) {
+    return { terminalStatus: 'unavailable', workerStatus: 'failed' };
+  }
+  return { terminalStatus: 'error', workerStatus: 'failed' };
 }
 
 // === main projection ===
@@ -106,12 +140,13 @@ export function toWireRecord(
     toolMode: 'none' | 'readonly' | 'no-shell' | 'full';
     implementerModel: string;
     implementerTier: 'standard' | 'complex' | 'main';
-    mainModelFamily: string;
+    mainModelFamily: ModelFamily;
   },
 ): TaskCompletedEventType {
   const { terminalStatus, workerStatus } = mapStatusToWire(
     env.status,
-    (env.structuredError as { code?: string } | null)?.code ?? null,
+    env.errorCode ?? ((env.structuredError as { code?: string } | null)?.code ?? null),
+    env.wasCancelled,
   );
 
   // Resolve the main model's rate card once; per-stage and top-level
@@ -138,19 +173,10 @@ export function toWireRecord(
       return hasTokens || hasCost;
     })
     .map((s) => {
-    const name =
-      s.name === 'implementing'
-        ? 'implementing'
-        : s.name === 'reviewing'
-          ? 'review'
-          : s.name === 'reworking'
-            ? 'rework'
-            : s.name === 'annotating'
-              ? 'annotating'
-              : 'committing';
-
+    // `reviewing` is the wire's `review`; there is no third case — see StageName. The literal
+    // is applied per-branch below rather than shared here, so the discriminated union in
+    // `StageEntrySchema` resolves without a cast.
     const base = {
-      name,
       round: s.round,
       model: normalizeModel(s.model).canonical,
       tier: s.tier,
@@ -163,8 +189,6 @@ export function toWireRecord(
         s.cachedNonReadTokens === null ? null : clampCachedTokens(s.cachedNonReadTokens),
       filesWrittenCount: clampFilesWrittenCount(s.filesWrittenCount),
       turnCount: clampTurnCount(s.turnsUsed),
-      maxIdleMs: 0,
-      totalIdleMs: 0,
       mainCostUSD: mainCard
         ? priceTokens({
             inputTokens: s.inputTokens,
@@ -175,53 +199,28 @@ export function toWireRecord(
         : null,
     };
 
-    // Add route-specific fields based on stage name.
-    // 4.7.4+: findingsBySeverity / findingsOutcome / outcomeInferred /
-    // outcomeMalformed are top-level only — stages do NOT carry them.
-    if (name === 'implementing') return base;
-    if (name === 'review') {
-      // Map envelope `verdict` to the wire's review verdict enum.
-      const reviewVerdict = s.verdict;
-      let wireVerdict: 'approved' | 'concerns' | 'changes_required' | 'error' | 'skipped' | 'annotated' | 'not_applicable';
-      if (reviewVerdict === 'approved' || reviewVerdict === 'changes_required'
-          || reviewVerdict === 'concerns' || reviewVerdict === 'error') {
-        wireVerdict = reviewVerdict;
-      } else if (s.outcome === 'skipped' || s.outcome === null) {
-        wireVerdict = 'skipped';
-      } else if (s.outcome === 'fail') {
-        wireVerdict = 'error';
-      } else {
-        wireVerdict = 'skipped';
-      }
-      return {
-        ...base,
-        verdict: wireVerdict as never,
-        roundsUsed: 1,
-        concernCategories: s.concernCategories ?? [],
-      };
+    // 4.7.4+: findingsBySeverity / findingsOutcome / outcomeInferred / outcomeMalformed are
+    // top-level only — stages do NOT carry them.
+    if (s.name === 'implementing') return { ...base, name: 'implementing' as const };
+
+    // Map envelope `verdict` to the wire's review verdict enum.
+    const reviewVerdict = s.verdict;
+    let wireVerdict: 'approved' | 'concerns' | 'changes_required' | 'error' | 'skipped' | 'annotated' | 'not_applicable';
+    if (reviewVerdict === 'approved' || reviewVerdict === 'changes_required'
+        || reviewVerdict === 'concerns' || reviewVerdict === 'error') {
+      wireVerdict = reviewVerdict;
+    } else if (s.outcome === 'fail') {
+      wireVerdict = 'error';
+    } else {
+      wireVerdict = 'skipped';
     }
-    if (name === 'rework')
-      return {
-        ...base,
-        triggeringConcernCategories: s.concernCategories ?? [],
-      };
-    if (name === 'annotating') {
-      const ann = s as { outcome?: 'advance' | 'fail' | 'skipped' | null };
-      let out: 'transformed' | 'failed' | 'skipped' | 'not_applicable' | 'passed';
-      if (ann.outcome === 'advance') out = 'transformed';
-      else if (ann.outcome === 'fail') out = 'failed';
-      else out = 'skipped';
-      return {
-        ...base,
-        outcome: out as never,
-        skipReason: (s.skipReason ?? null) as never,
-      };
-    }
-    // committing
     return {
       ...base,
-      filesCommittedCount: s.filesCommittedCount ?? 0,
-      branchCreated: s.branchCreated ?? false,
+      name: 'review' as const,
+      verdict: wireVerdict,
+      // Both bounds the schema declares: 16 categories, 64 chars each. One
+      // over-long category used to fail the parse and drop the whole event.
+      concernCategories: (s.concernCategories ?? []).slice(0, 16).map((c) => c.slice(0, 64)),
     };
   });
 
@@ -245,12 +244,6 @@ export function toWireRecord(
       a.stage.localeCompare(b.stage) || a.turn - b.turn || a.tool.localeCompare(b.tool))
     .slice(0, 500);
 
-  const distinctProviders = new Set(
-    env.escalationLog
-      .map((e) => (e as { toModel?: string }).toModel ?? '')
-      .filter(Boolean),
-  ).size;
-
   // Aggregate per-tier usage from the envelope's stages array. Each stage
   // already carries `tier`, `model`, `costUSD`, and token counts; bucket by
   // tier and sum. Without this, downstream telemetry can't break out
@@ -261,8 +254,12 @@ export function toWireRecord(
     costUSD: number | null;
     inputTokens: number;
     outputTokens: number;
-    cachedReadTokens: number | null;
-    cachedNonReadTokens: number | null;
+    // NOT nullable, unlike the StageRecord fields they accumulate from: a bucket is created
+    // with zeros and only ever added to. Declaring them nullable forced a `bucket.x !== null`
+    // guard that could not fire, and an `as never` at the schema boundary to paper over the
+    // resulting mismatch — which is what hid the missing `main` key.
+    cachedReadTokens: number;
+    cachedNonReadTokens: number;
   };
   const tierUsageBuckets: { standard?: TierBucket; complex?: TierBucket; main?: TierBucket } = {};
   for (const s of env.stages) {
@@ -286,13 +283,24 @@ export function toWireRecord(
     bucket.costUSD = (bucket.costUSD ?? 0) + (s.costUSD ?? 0);
     bucket.inputTokens += s.inputTokens;
     bucket.outputTokens += s.outputTokens;
-    if (s.cachedReadTokens !== null && bucket.cachedReadTokens !== null) bucket.cachedReadTokens += s.cachedReadTokens;
-    if (s.cachedNonReadTokens !== null && bucket.cachedNonReadTokens !== null) bucket.cachedNonReadTokens += s.cachedNonReadTokens;
+    if (s.cachedReadTokens !== null) bucket.cachedReadTokens += s.cachedReadTokens;
+    if (s.cachedNonReadTokens !== null) bucket.cachedNonReadTokens += s.cachedNonReadTokens;
   }
   // Prefer the first stage's tier as the task's headline agentType — matches
   // implementerTier's derivation and reflects what the task actually used,
   // not whatever default async-dispatch seeded the envelope with.
   const wireAgentType: 'standard' | 'complex' | 'main' = env.stages[0]?.tier ?? env.agentType;
+
+  // What this run WOULD have cost on the configured main tier — the baseline both
+  // `mainCostUSD` and `costDeltaVsMainUSD` are expressed against.
+  const taskMainCostUSD = mainCard
+    ? priceTokens({
+        inputTokens: env.totalInputTokens,
+        outputTokens: env.totalOutputTokens,
+        cachedReadTokens: env.totalCachedReadTokens,
+        cachedNonReadTokens: env.totalCachedNonReadTokens,
+      }, mainCard)
+    : null;
 
   const record: TaskCompletedEventType = {
     eventId: randomUUID(),
@@ -304,10 +312,12 @@ export function toWireRecord(
     implementerModel: opts.implementerModel,
     implementerTier: opts.implementerTier,
     mainModel: env.mainModel,
-    mainModelFamily: opts.mainModelFamily as never,
-    tierUsage: tierUsageBuckets as never,
-    terminalStatus: terminalStatus as never,
-    workerStatus: workerStatus as never,
+    mainModelFamily: opts.mainModelFamily,
+    // No cast: the bucket shape and the schema agree, and the cast is what hid the missing
+    // `main` key from the typechecker while Zod quietly dropped it at parse.
+    tierUsage: tierUsageBuckets,
+    terminalStatus,
+    workerStatus,
     errorCode: coerceErrorCode(env.errorCode ?? ((env.structuredError as { code?: string } | null)?.code ?? null)),
     inputTokens: clampInputTokens(env.totalInputTokens),
     outputTokens: clampOutputTokens(env.totalOutputTokens),
@@ -315,24 +325,15 @@ export function toWireRecord(
     cachedNonReadTokens: clampCachedTokens(env.totalCachedNonReadTokens),
     totalDurationMs: clampDurationMsTotal(env.totalDurationMs),
     totalCostUSD: clampTaskCost(env.totalCostUSD),
-    mainCostUSD: mainCard
-      ? priceTokens({
-          inputTokens: env.totalInputTokens,
-          outputTokens: env.totalOutputTokens,
-          cachedReadTokens: env.totalCachedReadTokens,
-          cachedNonReadTokens: env.totalCachedNonReadTokens,
-        }, mainCard)
-      : null,
-    costDeltaVsMainUSD: mainCard
-      ? clampTaskCost(env.totalCostUSD) - priceTokens({
-          inputTokens: env.totalInputTokens,
-          outputTokens: env.totalOutputTokens,
-          cachedReadTokens: env.totalCachedReadTokens,
-          cachedNonReadTokens: env.totalCachedNonReadTokens,
-        }, mainCard)
-      : null,
-    concernCount: env.findings.length,
-    findingsBySeverity: env.findings.reduce(
+    mainCostUSD: taskMainCostUSD,
+    // Subtracted from the SAME value reported above, not a second identical `priceTokens` call.
+    // Two copies of one expression let the delta silently stop being `actual - mainCostUSD` the
+    // moment one of them is edited.
+    costDeltaVsMainUSD: taskMainCostUSD === null ? null : clampTaskCost(env.totalCostUSD) - taskMainCostUSD,
+    concernCount: clampConcernCount(env.findings.length),
+    // Built from the SAME clamped list the count comes from, so R17
+    // (histogram sums to concernCount) cannot be violated by the clamp itself.
+    findingsBySeverity: env.findings.slice(0, 150).reduce(
       (acc, f) => {
         const s = f.severity;
         if (s === 'critical' || s === 'high' || s === 'medium' || s === 'low') acc[s] += 1;
@@ -340,18 +341,17 @@ export function toWireRecord(
       },
       { critical: 0, high: 0, medium: 0, low: 0 },
     ),
-    // 4.7.4+ outcome rollup. Source priority: review → annotating → implementing.
+    // 4.7.4+ outcome rollup. Source priority: review → implementing. `annotating` sat between
+    // them and is gone with the stage — see StageName in task-envelope.ts.
     // Each stage stores the same value the worker / reviewer emitted; the first
     // non-null wins because later stages mirror earlier ones (see the
     // outcomePriority walk below). Top-level is the single source backend + frontend read.
     ...(() => {
-      const outcomePriority: Array<'reviewing' | 'annotating' | 'implementing'> = ['reviewing', 'annotating', 'implementing'];
+      const outcomePriority: Array<'reviewing' | 'implementing'> = ['reviewing', 'implementing'];
       type StageWithOutcome = {
         name: string;
         findingsOutcome?: FindingsOutcome | null;
         findingsOutcomeReason?: string | null;
-        outcomeInferred?: boolean;
-        outcomeMalformed?: boolean;
       };
       const pick = outcomePriority
         .map((n) => (env.stages as StageWithOutcome[]).find((st) => st.name === n && st.findingsOutcome != null))
@@ -360,17 +360,11 @@ export function toWireRecord(
       return {
         findingsOutcome: pick.findingsOutcome ?? undefined,
         ...(pick.findingsOutcomeReason !== undefined && { findingsOutcomeReason: pick.findingsOutcomeReason }),
-        ...(pick.outcomeInferred !== undefined && { outcomeInferred: pick.outcomeInferred }),
-        ...(pick.outcomeMalformed !== undefined && { outcomeMalformed: pick.outcomeMalformed }),
       };
     })(),
-    escalationCount: Math.max(0, distinctProviders - 1),
-    fallbackCount: 0,
     filesWrittenCount: clampFilesWrittenCount(env.realFilesChanged.length),
-    stallCount: env.stallCount,
-    taskMaxIdleMs: env.taskMaxIdleMs,
     sandboxViolationCount: env.sandboxViolationCount,
-    stages: wireStages as never,
+    stages: wireStages,
     toolCalls: wireToolCalls,
     // 4.7.5: surface parser-side validation warnings (dropped Findings, malformed
     // bullets) on the wire so the backend can analytics on output-format drift.

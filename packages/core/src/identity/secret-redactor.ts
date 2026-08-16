@@ -8,6 +8,13 @@ const PATTERNS: Array<[RegExp, string]> = [
   // GitLab tokens: glpat-, gldt-, glrt-, glcbt-, glptt-, glsoat-, … (gl + routing
   // prefix + `-` + ≥20 token chars). The config stores a GitLab-capable token surface.
   [/\bgl[a-z]{2,6}-[A-Za-z0-9_\-]{20,}/g, '[REDACTED-GITLAB-TOKEN]'],
+  // JWTs, redacted before Bearer so a bare one is caught too. `eyJ` is not a heuristic: it is
+  // base64url for `{"`, so a three-segment dotted string starting with it is a JWT by
+  // construction. It matters because the patterns above are all PREFIX-based, and a provider
+  // whose credential is a JWT has no prefix to match — the token only ever got redacted when it
+  // happened to sit behind `Bearer`. The always-on stderr sink renders whole command lines and
+  // provider error messages, where a credential appears bare as often as not.
+  [/\beyJ[A-Za-z0-9_\-]{8,}\.[A-Za-z0-9_\-]{8,}\.[A-Za-z0-9_\-]+/g, '[REDACTED-JWT]'],
   [/Bearer\s+[A-Za-z0-9._\-]{20,}/g, 'Bearer [REDACTED]'],
 ];
 
@@ -18,6 +25,24 @@ export function redactSecrets(value: unknown): unknown {
   return walk(value, visited);
 }
 
+/**
+ * `visited` holds the ANCESTORS of the current node, not every node ever seen.
+ *
+ * It used to be the latter — entries were added and never removed — which made it a
+ * "seen anywhere" set rather than a cycle detector. Any value referenced twice in the same
+ * structure, with no cycle involved at all, came out as `[REDACTED-CYCLE]` the second time.
+ *
+ * That is not hypothetical: `buildEnvelopeSnapshot` assigns
+ * `realFilesChanged: result.filesChangedFromGit ?? implTurn.filesWritten`, so on every read route
+ * — and every write route where git had no answer — `filesWritten` and `realFilesChanged` are the
+ * SAME array instance. Every such envelope reached the diagnostics JSONL with
+ * `"realFilesChanged": "[REDACTED-CYCLE]"` in place of its file list, and an operator reading the
+ * log for a forensic answer found a redaction marker over data that was never sensitive and never
+ * circular.
+ *
+ * Deleting on the way out is what makes it path-based: a node is only a cycle if it is its own
+ * ancestor.
+ */
 function walk(value: unknown, visited: WeakSet<object>): unknown {
   if (typeof value === 'string') {
     let out = value;
@@ -27,13 +52,16 @@ function walk(value: unknown, visited: WeakSet<object>): unknown {
   if (Array.isArray(value)) {
     if (visited.has(value)) return REDACTED_CYCLE;
     visited.add(value);
-    return value.map(v => walk(v, visited));
+    const out = value.map(v => walk(v, visited));
+    visited.delete(value);
+    return out;
   }
   if (value && typeof value === 'object') {
     if (visited.has(value)) return REDACTED_CYCLE;
     visited.add(value);
     const out: Record<string, unknown> = {};
     for (const [k, v] of Object.entries(value)) out[k] = walk(v, visited);
+    visited.delete(value);
     return out;
   }
   return value;

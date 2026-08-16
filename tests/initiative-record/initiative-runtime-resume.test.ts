@@ -11,10 +11,10 @@ describe('InitiativeRecordRuntime resume', () => {
     const stateDir = mkdtempSync(join(tmpdir(), 'mma-initiative-runtime-'));
     const runtime = InitiativeRecordRuntime.open({ stateDir });
     try {
-      const product = runtime.execute({ operation: 'product_create', input: { name: 'MMA', slug: 'mma' }, expected_revision: 0, provenance });
-      const initiative = runtime.execute({ operation: 'initiative_create', input: { product_id: product.uuid, title: 'I', goal: 'G', status: 'open', outcome: null }, expected_revision: 0, provenance });
+      const product = runtime.execute({ operation: 'product_create', input: { name: 'MMA', slug: 'mma' }, expected_revision: 0, provenance }) as { uuid: string };
+      const initiative = runtime.execute({ operation: 'initiative_create', input: { product_id: product.uuid, title: 'I', goal: 'G', status: 'open', outcome: null }, expected_revision: 0, provenance }) as { uuid: string; human_key: string };
       const response = runtime.initiativeResume({ initiative: { human_key: initiative.human_key } });
-      expect(Object.keys(response).sort()).toEqual(['artifacts', 'counts', 'decisions', 'events', 'evidence', 'initiative', 'lifecycle', 'product', 'related_initiatives', 'requirements', 'risks', 'tasks', 'verification', 'workspaces']);
+      expect(Object.keys(response).sort()).toEqual(['artifacts', 'counts', 'decisions', 'deliverables', 'events', 'evidence', 'initiative', 'lifecycle', 'product', 'related_initiatives', 'requirements', 'risks', 'tasks', 'verification', 'workspaces']);
       expect(response.initiative.uuid).toBe(initiative.uuid);
       expect(response.product.uuid).toBe(product.uuid);
       expect(response.events).toEqual([...response.events].sort((a, b) => b.event_sequence - a.event_sequence));

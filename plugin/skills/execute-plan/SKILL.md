@@ -17,6 +17,11 @@ Dispatch Contract Tasks from a **contract-first** plan file to a single worker s
 
 - The plan must be a contract-first, deliverable-neutral Contract Task plan. A legacy/non-conforming plan is rejected before any worker starts, with a terminal `status: "failed"`.
 - A task's deterministic check is OPTIONAL — a task with no check is not an error, and its Contract alone defines what "done" means. The pipeline validates and materializes any task's plan-authored checks, then **re-materializes them from the plan before scoring** — so an executor cannot weaken them.
+- **Where to read the outcome.** `output.completionPercent` carries the derived percentage, and
+  `output.concern` carries the reason for any shortfall (`{ code, message }` — a failing acceptance
+  command, or the outstanding task ids). Both appear on a `done_with_concerns` run, where `error` is
+  `null` by design: a shortfall is a concern, not a failure, so `error` alone cannot tell a clean
+  run from one whose tests failed.
 - **Completion is REPORTED, not gated.** `completionPercent` is derived from the reviewer's
   per-task verdicts (`round(done / dispatched * 100)`), and a shortfall names the outstanding task
   ids. A task reported not-done, an unresolvable reviewer report, or failing acceptance tests all
@@ -26,7 +31,7 @@ Dispatch Contract Tasks from a **contract-first** plan file to a single worker s
 - `failed` means the route could not RUN or could not DELIVER: plan unreadable/malformed,
   acceptance-test materialization failure, a dead implementer turn, cancellation, or a failed
   commit. If you see `failed`, something broke — otherwise read the concerns and review the diff.
-- Pre-dispatch/materialization failures surface as specific terminal error codes: `unsupported-legacy-plan`, `malformed-plan`, `unsafe-test-path`, and `test-path-collision`.
+- Pre-dispatch/materialization failures surface as specific terminal error codes: `plan_not_found` (the path does not resolve), `no_match` (no `tasks[]` selector matched a plan task — the message lists the available ids), `unsupported-legacy-plan`, `malformed-plan`, `unsafe-test-path`, and `test-path-collision`.
 
 ## When to Use
 
@@ -71,7 +76,16 @@ is not available in this session, run `mma clients`.
 ### `reviewPolicy` — review lifecycle per task
 
 All task types default to `"reviewed"` (two-phase pipeline: implementer + refiner).
-Only `orchestrate` forces `"none"`. Callers can override per-request.
+Callers can override per-request, EXCEPT for two types that force a value and ignore the field:
+
+| Type | Forced | Why |
+|---|---|---|
+| `orchestrate` | `"none"` | The orchestrator's answer IS the deliverable; there is nothing for a second pass to refine. |
+| `execute_plan` | `"reviewed"` | Contract satisfaction and `completionPercent` are scored from the reviewer's per-task `tasks[]`, so an unreviewed run has no scoring source at all. |
+
+Sending `reviewPolicy: "none"` to `execute_plan` is accepted and ignored — the reviewer runs and is
+billed. This is stated here because the request is silently honoured-looking: nothing in the
+response reports that the override was dropped.
 
 For read-only routes (audit, review, debug, investigate, research, journal_recall),
 the refiner verifies the implementer's output against source material — checking
@@ -96,13 +110,6 @@ Call `mma_run` with:
 
 ## Response shapes
 
-`mma_run` returns either the terminal envelope inline (short tasks) or a `{ executionId, type, cwd }`
-handle for longer ones — poll with `mma_execution_get`, block with `mma_execution_wait`, cancel with
-`mma_execution_cancel`. See `_shared/response-shape.md` below for the full envelope shape and the
-tool call error shape.
-
-## Response shapes
-
 ### mma_run — dispatch
 
 Short tasks return the terminal envelope (below) inline, in the tool result. Longer-running
@@ -112,7 +119,25 @@ tasks return a handle instead:
 { "executionId": "<uuid>", "type": "<route>", "cwd": "<abs path>" }
 ```
 
-Use `executionId` to poll with `mma_execution_get` / `mma_execution_wait`.
+Use `executionId` to poll with `mma_execution_get`, block with `mma_execution_wait`, or stop the
+work with `mma_execution_cancel`.
+
+### A long dispatch outlives your turn; your polling does not
+
+The execution runs in the mma daemon, not in your session. It keeps going regardless of what your
+side is doing, and its terminal envelope is persisted — `mma_execution_get` returns it later even
+after a daemon restart. **Nothing is lost if you stop watching.**
+
+What stops is your polling. `mma_execution_wait` blocks for at most its timeout and then returns a
+running snapshot; "call again" only happens while your turn is active. Your client is never told
+that an mma execution finished — the execution belongs to the daemon, not to your client's own task
+tracking — so no notification will arrive to bring you back.
+
+For work that outlasts a turn, hand the waiting to something your client DOES track. If it can run
+a command as a tracked background job, wrap the poll in one: a job that blocks until the execution
+is terminal and whose exit your client notices. Completion then re-enters your session instead of
+depending on you still being mid-turn. Without that, a long dispatch looks stalled while it is in
+fact running — and the result is sitting in the store whenever you next ask for it.
 
 ### mma_execution_get / mma_execution_wait — poll
 
@@ -126,7 +151,7 @@ full envelope — these 5 top-level fields:
     "executionId": "<uuid>",
     "type": "<route>",
     "subtype": "<subtype or absent>",
-    "status": "completed | done_with_concerns | failed | cancelled",
+    "status": "done | done_with_concerns | failed | cancelled | interrupted",
     "sessions": { "implementer": "<session-id>", "reviewer": "<session-id or null>" },
     "worktree": null,
     "dirtyAtDispatch": false
@@ -165,6 +190,11 @@ live in a distinct `execution` block (`sessions`, `worktree`, `dirtyAtDispatch`)
 | `error` is `null` | Task succeeded — read `output` |
 | `error` is `{ "code": "...", "message": "..." }` | Task failed — read `error.code` + `error.message` |
 
+`interrupted` is the fifth terminal status: boot reconciliation writes it when a daemon restart
+orthaned a running execution. It carries a non-null `error` with a retryable reason
+(`daemon_restarted`), so Step 1 still reads correctly — but a consumer switching on only the other
+four hits an unhandled state after any restart.
+
 **Step 2 — extract the result from `output.summary`:**
 
 `output.summary` is the **parsed JSON** from the refiner (reviewer). Its internal shape varies by route — see the per-skill "Reading the output" section for the exact fields. Common patterns:
@@ -192,7 +222,9 @@ response.output.summary.findings[i].suggestion  ← fix recommendation (some rou
 
 ```
 response.output.filesChanged       ← array of relative paths modified by the worker
-response.output.contextBlockId     ← non-null for read routes (reusable in contextBlockIds)
+response.output.contextBlockId     ← non-null for READ-ONLY types (audit/review/debug/investigate/
+                                     research/journal_recall); null for spec and plan too, which
+                                     read but are cwd-only (reusable in contextBlockIds)
 ```
 
 **Step 5 — check `output.reviewerNote` (reviewer availability):**

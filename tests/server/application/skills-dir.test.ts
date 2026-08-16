@@ -1,3 +1,4 @@
+import * as path from 'node:path';
 import { resolveSkillsDirWith, SKILLS_DIR } from '../../../packages/server/src/application/skills-dir.js';
 
 /**
@@ -53,16 +54,20 @@ it('prefers the monorepo sources when they exist, so a local edit takes effect',
   expect(resolved).toBe(devSkills);
 });
 
-it('does not throw when the core package cannot be resolved at all', () => {
-  expect(() =>
-    resolveSkillsDirWith({
-      baseDir: HOISTED.baseDir,
-      resolveModule: () => {
-        throw new Error('ERR_MODULE_NOT_FOUND');
-      },
-      exists: () => false,
-    }),
-  ).not.toThrow();
+it('falls back to a NAMEABLE path when the core package cannot be resolved at all', () => {
+  // `not.toThrow()` alone was the whole assertion here, so returning `undefined` or `''` would
+  // have passed — and the caller's failure would then be `skill_load_failed` naming nothing,
+  // which is the exact shape of the defect this file exists for. What the fallback must be is a
+  // path a human can act on: the monorepo guess, so the error at least says where it looked.
+  const resolved = resolveSkillsDirWith({
+    baseDir: HOISTED.baseDir,
+    resolveModule: () => {
+      throw new Error('ERR_MODULE_NOT_FOUND');
+    },
+    exists: () => false,
+  });
+  expect(resolved).toMatch(/packages[/\\]core[/\\]src[/\\]skills$/);
+  expect(path.isAbsolute(resolved), 'a relative path in an error message locates nothing').toBe(true);
 });
 
 it('resolves to a real directory in whatever layout this test run is using', async () => {

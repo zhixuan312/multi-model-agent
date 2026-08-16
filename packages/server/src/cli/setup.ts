@@ -36,6 +36,7 @@ import type { ClientId } from '@zhixuan92/multi-model-agent-core';
 import { CLIENT_IDS } from '@zhixuan92/multi-model-agent-core';
 import {
   applyToConfig,
+  type AgentsCarrier,
   persistConfig,
   probeApi,
   type ConfigureProviderRequest,
@@ -113,7 +114,10 @@ export async function runSetup(deps: SetupDeps = {}): Promise<number> {
     : 'Press Enter at any prompt to accept the suggested value.\n\n');
 
   // ── Agents ────────────────────────────────────────────────────────────────
-  const config: { agents?: Record<string, unknown> } = { agents: { ...existing } as Record<string, unknown> };
+  // Typed as the carrier the two config functions declare, so `mma setup` and the HTTP
+  // configure-provider handler hand them the SAME shape. Spelling it structurally here and casting
+  // at each call is what produced the two `as never` arguments this replaced.
+  const config: AgentsCarrier = { agents: { ...existing } };
   out('Step 1 of 2 · Agents\n');
 
   for (const tier of TIERS) {
@@ -160,10 +164,10 @@ export async function runSetup(deps: SetupDeps = {}): Promise<number> {
         ? `    ✓ ${probe.detail}\n`
         : `    ! ${probe.detail} — saved anyway; fix the credential and re-run \`mma setup\`.\n`);
     }
-    applyToConfig(config as never, request);
+    applyToConfig(config, request);
   }
 
-  const written = persistConfig(configPath, config as never);
+  const written = persistConfig(configPath, config);
   if (!written.ok) {
     stderr(`mma setup: could not write ${configPath}: ${written.error}\n`);
     return SetupExitCode.ERR_PARTIAL;

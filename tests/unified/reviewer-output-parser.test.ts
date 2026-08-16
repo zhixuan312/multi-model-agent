@@ -118,7 +118,11 @@ describe('parseReviewerOutput', () => {
         expect(t.contractCompleteness).toBe('complete');
       }
     });
-    it('accepts plan output with the field absent (undefined), staying legacy-compatible', () => {
+    // Absence is a SIGNAL, not a compatibility allowance: plan/review.md tells the reviewer to set
+    // `contractCompleteness` only when its pass directly evidences one, so omitting it means "no
+    // evidence either way". Reading it as legacy tolerance would invite deleting the optionality,
+    // which this repo's no-backward-compatibility rule would otherwise justify.
+    it('accepts plan output with the field absent — the reviewer had no evidence to report', () => {
       const legacy = JSON.stringify({ planPath: 'x', taskCount: 1, tasks: [{ title: 'T', verdict: 'executable' }], notes: '' });
       const r = parseReviewerOutput(legacy, 'plan');
       expect(r.ok).toBe(true);

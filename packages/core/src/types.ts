@@ -9,7 +9,6 @@ export type {
   Effort,
   CostTier,
   WorkerStatus,
-  TaskSpec,
 } from './types/task-spec.js';
 
 export type { SandboxPolicy } from './unified/type-registry.js';

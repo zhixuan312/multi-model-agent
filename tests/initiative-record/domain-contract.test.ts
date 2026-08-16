@@ -33,7 +33,7 @@ describe('Initiative Record public contract', () => {
   it('keeps exactly the pinned resume sections and provenance fields type-visible', () => {
     type Equal<A, B> = (<T>() => T extends A ? 1 : 2) extends (<T>() => T extends B ? 1 : 2) ? true : false;
     type Assert<T extends true> = T;
-    type ResponseKeys = 'initiative' | 'product' | 'workspaces' | 'related_initiatives' | 'tasks' | 'artifacts' | 'events' | 'counts';
+    type ResponseKeys = 'initiative' | 'product' | 'workspaces' | 'related_initiatives' | 'tasks' | 'artifacts' | 'events' | 'requirements' | 'decisions' | 'risks' | 'evidence' | 'verification' | 'lifecycle' | 'deliverables' | 'counts';
     const exactKeys: Assert<Equal<keyof InitiativeResumeResponse, ResponseKeys>> = true;
     expect(exactKeys).toBe(true);
     expect(provenanceSchema.safeParse(provenance).success).toBe(true);

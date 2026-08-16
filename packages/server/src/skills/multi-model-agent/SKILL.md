@@ -24,7 +24,9 @@ in this session, run `mma clients` to see how to connect it.
 
 ```dot
 digraph picker {
+    "Business stakeholder describing a goal?" [shape=diamond];
     "New idea / feature?" [shape=diamond];
+    "Whole lifecycle, or one step?" [shape=diamond];
     "Grounded yet?" [shape=diamond];
     "Spec on disk?" [shape=diamond];
     "Plan on disk?" [shape=diamond];
@@ -33,6 +35,9 @@ digraph picker {
     "Debug a failure?" [shape=diamond];
     "Question about the project?" [shape=diamond];
     "Convergent or divergent?" [shape=diamond];
+    "Asking what this project already learned?" [shape=diamond];
+    "External-research question?" [shape=diamond];
+    "Learned something worth keeping?" [shape=diamond];
     "mma-brainstorm" [shape=box];
     "/mma-flow" [shape=box, style=bold];
     "mma-spec" [shape=box];
@@ -44,14 +49,23 @@ digraph picker {
     "mma-investigate" [shape=box];
     "mma-explore" [shape=box];
     "mma-delegate" [shape=box];
+    "mma-solution-lead" [shape=box];
+    "mma-research" [shape=box];
+    "mma-journal-recall" [shape=box];
+    "mma-journal-record" [shape=box];
 
-    "New idea / feature?" -> "Grounded yet?" [label="yes"];
+    "New idea / feature?" -> "Business stakeholder describing a goal?" [label="yes"];
+    "Business stakeholder describing a goal?" -> "mma-solution-lead" [label="yes — own the whole intake-to-delivery relationship, in their words"];
+    "Business stakeholder describing a goal?" -> "Whole lifecycle, or one step?" [label="no"];
+    "Whole lifecycle, or one step?" -> "/mma-flow" [label="whole — suggest user run /mma-flow"];
+    "Whole lifecycle, or one step?" -> "Grounded yet?" [label="one step"];
     "Grounded yet?" -> "mma-explore" [label="no — ground it first"];
     "Grounded yet?" -> "mma-brainstorm" [label="yes — grill to spec"];
+    "mma-brainstorm" -> "mma-spec" [label="confirmed decisions"];
+    "mma-spec" -> "mma-plan" [label="spec written"];
     "New idea / feature?" -> "Spec on disk?" [label="no"];
     "Spec on disk?" -> "mma-plan" [label="yes — need plan"];
     "Spec on disk?" -> "Plan on disk?" [label="no"];
-    "Plan on disk?" -> "/mma-flow" [label="no — suggest user run /mma-flow command"];
     "Plan on disk?" -> "mma-execute-plan" [label="yes"];
     "Plan on disk?" -> "Audit a doc?" [label="no"];
     "Audit a doc?" -> "mma-audit" [label="yes"];
@@ -59,9 +73,15 @@ digraph picker {
     "Review code?" -> "mma-review" [label="yes"];
     "Review code?" -> "Debug a failure?" [label="no"];
     "Debug a failure?" -> "mma-debug" [label="yes"];
-    "Debug a failure?" -> "Question about the project?" [label="no"];
+    "Debug a failure?" -> "Asking what this project already learned?" [label="no"];
+    "Asking what this project already learned?" -> "mma-journal-recall" [label="yes — before re-treading ground"];
+    "Asking what this project already learned?" -> "Learned something worth keeping?" [label="no"];
+    "Learned something worth keeping?" -> "mma-journal-record" [label="yes — a decision, rationale, or convention"];
+    "Learned something worth keeping?" -> "Question about the project?" [label="no"];
     "Question about the project?" -> "Convergent or divergent?" [label="yes"];
-    "Question about the project?" -> "mma-delegate" [label="no — ad-hoc"];
+    "Question about the project?" -> "External-research question?" [label="no"];
+    "External-research question?" -> "mma-research" [label="yes — prior art, state of the art, published methods"];
+    "External-research question?" -> "mma-delegate" [label="no — ad-hoc"];
     "Convergent or divergent?" -> "mma-investigate" [label="convergent (one answer)"];
     "Convergent or divergent?" -> "mma-explore" [label="divergent — writes exploration.md"];
 }
@@ -71,9 +91,10 @@ digraph picker {
 |---|---|
 | `mma-explore` | Braindump → fan out investigate + research + recall in parallel → synthesise → write `exploration.md` (Background · Current state · Rough direction). Divergent grounding before brainstorm/plan. |
 | `mma-brainstorm` | Relentless requirement interview — name the destination → grill the 8 spec components → confirmed decisions → dispatch `mma-spec` |
-| `/mma-flow` | **Command (Claude Code only)** — Packaged end-to-end SDLC playbook invoked via `/mma-flow`. Locate → explore → brainstorm → spec → audits → branch → execute → review → verify → PR → merge. Handles both **single-project** repos and **multi-repo** products (parent workspace detected from git-bearing child directories). |
+| `/mma-flow` | **Command (Claude Code only)** — Packaged end-to-end SDLC playbook invoked via `/mma-flow`. Locate → explore → brainstorm → spec → audits → execute → review → verify → deliver. How it delivers is the contract's one `disposition`: `pr` (branch, PR, merge), `commit-in-place` (commit on the branch you already have), or `deliver-file` (write the declared artifact — no git required). Handles both **single-project** repos and **multi-repo** products (parent workspace detected from git-bearing child directories). |
 | `/mma-breakout` | **Command (Claude Code only)** — Packaged interactive expert-persona breakout invoked via `/mma-breakout`. Spawns a named teammate, keeps the deep dialogue in direct `@name` conversation, then closes with one confirmed journal batch |
 | `/mma-tldr` | **Command (Claude Code only)** — Reader utility invoked via `/mma-tldr`. Turns the previous assistant message, or a supplied file, URL, or text, into a short decision brief: TLDR, key points ranked by decision impact, and named omitted topics. Never routed automatically — the reader is the only one who knows they did not understand. |
+| `/mma-deck` | **Command (Claude Code only)** — Deck builder invoked via `/mma-deck`. Turns a source document, file, URL, or the previous message into a standalone offline HTML slide deck on the house visual system: finds the argument first, then chooses one composition per claim. Never routed automatically — the reader decides when material becomes a deck. |
 | `mma-spec` | Write a formal spec from structured design decisions (dispatches to `spec` task type) |
 | `mma-plan` | Write a contract-first implementation plan from a spec file (dispatches to `plan` task type) |
 | `mma-execute-plan` | Implement tasks from a plan file (descriptors match plan headings) |
@@ -82,6 +103,11 @@ digraph picker {
 | `mma-debug` | Debug a wrong deliverable (code or non-code) with a structured hypothesis |
 | `mma-investigate` | Project Q&A (code or non-code material) — structured answer with `file:line` citations + confidence |
 | `mma-delegate` | Ad-hoc implementation / research with no plan file |
+| `mma-research` | External multi-source research with citations (arxiv, semantic_scholar, github_search, brave) — prior art, state of the art, published methods. NOT codebase questions; those are `mma-investigate` |
+| `mma-journal-recall` | Ask what THIS project already learned, before designing or attempting something — a vague conceptual question is enough; returns prior lessons and how they relate |
+| `mma-journal-record` | Record a learning worth keeping — a decision, design rationale, user-behaviour pattern, process learning, or style convention — into the persistent team knowledge graph |
+| `mma-solution-lead` | Own a business stakeholder's goal end to end: understand it, draft and confirm the initiative in plain language, create the durable record only after confirmation, coordinate delivery, and report back with verification evidence — never surfacing engine internals |
+| `mma-orchestrate` | **Not agent-routed.** For a FRONTEND WORKFLOW that needs an LLM brain across phases: send a structured prompt, get structured output the calling system parses. Listed for completeness — a program selects it, not this decision graph |
 | `mma-context-blocks` | Register a reused doc once; reference by ID across N tasks |
 
 ## Best practices
@@ -137,7 +163,7 @@ Any artifact (spec, plan, prior-round findings, long error log) that crosses 2+ 
 
 4. **`full-batch-redispatch`** — Caller re-runs `mma-execute-plan` with the entire task list when only 2 of 8 tasks failed. The 6 successful tasks get re-charged. Corrective: dispatch a fresh `mma-execute-plan` scoped to ONLY the failed task headings (pass just those in `tasks[]`), so the successful tasks aren't re-run.
 
-When the user wants the packaged full SDLC route rather than one isolated worker step, suggest they run `/mma-flow` (a Claude Code command installed to `~/.claude/commands/mma-flow.md`). It is the packaged path from design through PR creation and conditional merge, while the other `mma-*` skills remain the underlying primitives used inside that flow. `/mma-flow` is Claude Code only — other clients use the individual skills directly.
+When the user wants the packaged full SDLC route rather than one isolated worker step, suggest they run `/mma-flow` (a Claude Code command installed to `~/.claude/commands/mma-flow.md`). It is the packaged path from design through delivery, and delivery is whichever `disposition` the approved contract declares — `pr`, `commit-in-place`, or `deliver-file`. Do not withhold the suggestion because the work has no PR in it, or because the target is not a git repository: `deliver-file` is valid outside git, and a report or a configuration is as much a deliverable here as a code change. The other `mma-*` skills remain the underlying primitives used inside that flow. `/mma-flow` is Claude Code only — other clients use the individual skills directly.
 
 When the user needs a bounded interactive expert-persona breakout without polluting the main thread, suggest `/mma-breakout` (a Claude Code command installed to `~/.claude/commands/mma-breakout.md`). It spawns a named breakout teammate, keeps the deep dialogue in direct `@name` conversation isolated from the main context, then closes with one confirmed journal batch instead of adding a backend task type. `/mma-breakout` is Claude Code only.
 
@@ -153,7 +179,7 @@ MCP support), run `mma clients` to see how to connect it.
 All routes accept `agentTier: "standard" | "complex" | "main"` to override the default tier. `mma-delegate` defaults to `"standard"` (cheaper, faster). Pick `"complex"` when:
 
 - The task touches many files or requires multi-step reasoning a standard-tier model cannot hold in context.
-- A prior standard run came back with `filesWritten: 0` or `incompleteReason: "turn_cap"` / `"timeout"`.
+- A prior standard run came back with an empty `output.filesChanged`, or failed with `error.code` of `sdk_max_turns` (ran out of turns) or `wall_clock_exceeded` (ran out of time). Those are the fields the terminal envelope actually carries — there is no `filesWritten` or `incompleteReason` on it.
 - The task is security-sensitive or ambiguous enough that being wrong is costly.
 
 Every route has a default tier that can be overridden by sending `agentTier`:
@@ -178,14 +204,14 @@ Every route has a default tier that can be overridden by sending `agentTier`:
 | Default | Value | Notes |
 |---|---|---|
 | Idle TTL | 24 h | Block eligible for eviction after 24 h with no active task references |
-| `maxEntries` | 500 | Per-project cap on total context blocks |
-| Body cap | 50 MiB | Maximum `content` size per block |
+| `server.limits.maxContextBlocksPerProject` | 500 | Per-project cap on total context blocks |
+| Body cap | 512 KiB | Maximum `content` size per block (`server.limits.maxContextBlockBytes`). Over REST the raw request body is capped at 256 KiB first, so an uncompressed block much above that fails on body size with an error that never names the block limit — gzip the request or use the MCP tool |
 
 Context blocks are immutable after creation. To update content, register a new block and switch `contextBlockIds` to the new ID.
 
 ## Terminal context block
 
-Every completed **read-route** task (audit / review / debug / investigate / research) auto-registers a reusable terminal context block containing its report (headline + findings). The block id is returned on the result as **`contextBlockId`**. Write routes (delegate / execute-plan) return `contextBlockId: null` — their record is the commit, not a block. This block is immutable, lives for the session duration, and counts against the project's `maxEntries` quota (default 500).
+Every completed **read-only** task — audit / review / debug / investigate / research / **journal_recall** — auto-registers a reusable terminal context block containing its report, returned as `contextBlockId`. The gate is the type's SANDBOX, not whether it is a read route: `spec` and `plan` read rather than write, but they are `cwd-only` (they write their document), so they return `contextBlockId: null` like `delegate` / `execute_plan` / `journal_record` / `orchestrate`. Filtering nulls out of a chain of results therefore drops spec and plan silently.
 
 Use it for delta follow-ups — feed prior results' block ids into a later call's `contextBlockIds`, filtering out nulls:
 
@@ -208,4 +234,4 @@ Use it for delta follow-ups — feed prior results' block ids into a later call'
 
 ## Diagnosing slow tasks
 
-`mma serve --verbose` (or `diagnostics.verbose: true` in config) records `tool_call`, `turn_complete`, and `heartbeat` events. Tail with `mma logs --follow --task=$TASK_ID`.
+`mma serve --log` (or `diagnostics.log: true` in config) writes a JSONL diagnostics file. Event streaming to stderr is always on — there is no `--verbose` flag and no `diagnostics.verbose` key; an unknown config key is silently dropped, so a typo there produces no logs and no error. The kinds recorded are `batch_created`, `batch_completed`, `batch_failed`, `batch_cancelled`, and `provider_event` (whose names are per-runner: `claude_tool_call`, `claude_turn_completed`, `codex_command_started`, …). Tail one execution with `mma logs --follow --batch=$EXECUTION_ID` — the filter matches every id spelling in the file. `--task=` is not a flag and is ignored, which returns the whole unfiltered log.

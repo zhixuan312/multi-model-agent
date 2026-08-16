@@ -98,7 +98,25 @@ tasks return a handle instead:
 { "executionId": "<uuid>", "type": "<route>", "cwd": "<abs path>" }
 ```
 
-Use `executionId` to poll with `mma_execution_get` / `mma_execution_wait`.
+Use `executionId` to poll with `mma_execution_get`, block with `mma_execution_wait`, or stop the
+work with `mma_execution_cancel`.
+
+### A long dispatch outlives your turn; your polling does not
+
+The execution runs in the mma daemon, not in your session. It keeps going regardless of what your
+side is doing, and its terminal envelope is persisted — `mma_execution_get` returns it later even
+after a daemon restart. **Nothing is lost if you stop watching.**
+
+What stops is your polling. `mma_execution_wait` blocks for at most its timeout and then returns a
+running snapshot; "call again" only happens while your turn is active. Your client is never told
+that an mma execution finished — the execution belongs to the daemon, not to your client's own task
+tracking — so no notification will arrive to bring you back.
+
+For work that outlasts a turn, hand the waiting to something your client DOES track. If it can run
+a command as a tracked background job, wrap the poll in one: a job that blocks until the execution
+is terminal and whose exit your client notices. Completion then re-enters your session instead of
+depending on you still being mid-turn. Without that, a long dispatch looks stalled while it is in
+fact running — and the result is sitting in the store whenever you next ask for it.
 
 ### mma_execution_get / mma_execution_wait — poll
 
@@ -112,7 +130,7 @@ full envelope — these 5 top-level fields:
     "executionId": "<uuid>",
     "type": "<route>",
     "subtype": "<subtype or absent>",
-    "status": "completed | done_with_concerns | failed | cancelled",
+    "status": "done | done_with_concerns | failed | cancelled | interrupted",
     "sessions": { "implementer": "<session-id>", "reviewer": "<session-id or null>" },
     "worktree": null,
     "dirtyAtDispatch": false
@@ -151,6 +169,11 @@ live in a distinct `execution` block (`sessions`, `worktree`, `dirtyAtDispatch`)
 | `error` is `null` | Task succeeded — read `output` |
 | `error` is `{ "code": "...", "message": "..." }` | Task failed — read `error.code` + `error.message` |
 
+`interrupted` is the fifth terminal status: boot reconciliation writes it when a daemon restart
+orthaned a running execution. It carries a non-null `error` with a retryable reason
+(`daemon_restarted`), so Step 1 still reads correctly — but a consumer switching on only the other
+four hits an unhandled state after any restart.
+
 **Step 2 — extract the result from `output.summary`:**
 
 `output.summary` is the **parsed JSON** from the refiner (reviewer). Its internal shape varies by route — see the per-skill "Reading the output" section for the exact fields. Common patterns:
@@ -178,7 +201,9 @@ response.output.summary.findings[i].suggestion  ← fix recommendation (some rou
 
 ```
 response.output.filesChanged       ← array of relative paths modified by the worker
-response.output.contextBlockId     ← non-null for read routes (reusable in contextBlockIds)
+response.output.contextBlockId     ← non-null for READ-ONLY types (audit/review/debug/investigate/
+                                     research/journal_recall); null for spec and plan too, which
+                                     read but are cwd-only (reusable in contextBlockIds)
 ```
 
 **Step 5 — check `output.reviewerNote` (reviewer availability):**

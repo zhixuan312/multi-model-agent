@@ -43,13 +43,21 @@ const DOT_VENDOR_PREFIXES = [
 ];
 
 const DASH_VENDOR_PREFIXES = ['aws-bedrock-', 'bedrock-', 'azure-'];
+/**
+ * The aggressive fallback strip, applied ONLY to an already-cleaned form.
+ *
+ * Its single call site (`extractCanonicalModelName`, fallback A) runs on the output of
+ * `cleanCandidate`, so anything `cleanCandidate` has already removed cannot appear here. Three
+ * entries used to duplicate it and could never fire: `@YYYY-MM-DD` and `-latest` (both stripped by
+ * `stripDateMarkers`) and `-vN[:M]` (`:` is a wrapper boundary, and `-vN` is stripped by
+ * `stripProvisioningVersion`). They read as coverage while matching nothing.
+ *
+ * So: do not add a pattern here that `cleanCandidate` already handles — add it there instead.
+ */
 const TRAILING_MARKERS = [
-  /@\d{4}-\d{2}-\d{2}$/i,
-  /-\d{4}(?:-\d{2}){0,2}$/i,
-  /-v\d+(?::\d+)?$/i,
+  /-\d{4}(?:-\d{2}){0,2}$/i,   // a bare year, or year-month: the date forms cleanCandidate leaves
   /-preview-\d+(?:-\d+)?$/i,
   /-preview$/i,
-  /-latest$/i,
   /-\d+k?$/i,
   /-base$/i,
   /-instruct$/i,
@@ -332,10 +340,19 @@ function resolveEntry(
 ): ModelProfile {
   const parent = findParentProfile(entry.prefix, resolved);
 
-  // Start with provider defaults
+  // Start with provider defaults.
+  //
+  // `family` is deliberately NOT read from `entry` here. It used to be — `entry.family ??
+  // parent?.family ?? providerDefaults.family` — and then the parent block below overwrote it
+  // unconditionally, and the entry block below that restored it. Three writes, of which two
+  // cancelled out, so the precedence was only correct because of the ORDER of two blocks that
+  // read like independent layers. Moving the entry-override block above the parent block — the
+  // natural "apply defaults, then overrides" refactor — would have silently reverted every
+  // family override to its parent's. One write per layer, defaults → parent → entry, in that
+  // order, is the whole rule.
   const result: ModelProfile = {
     prefix: entry.prefix,
-    family: entry.family ?? parent?.family ?? providerDefaults.family ?? 'other',
+    family: providerDefaults.family ?? 'other',
     tier: 'standard',
     defaultCost: 'medium',
     bestFor: 'general tasks',
@@ -375,6 +392,32 @@ function resolveEntry(
   if (entry.cachedNonRead  !== undefined) result.cachedNonReadCostPerMTok  = entry.cachedNonRead;
   if (entry.reasoning !== undefined) result.reasoningCostPerMTok = entry.reasoning;
   if (entry.inputTokenSoftLimit !== undefined) result.inputTokenSoftLimit = entry.inputTokenSoftLimit;
+
+  // Cache rates are a MULTIPLE of input, so a child that re-prices input must re-price them too.
+  //
+  // The parent hands its cache rates down as ABSOLUTE numbers. That is right for a child at the
+  // parent's price and wrong for one that overrides `input`: `claude-3-opus` (input 15) inherited
+  // the `claude` parent's 0.3, a 0.02x ratio where the family's own rate is 0.10x, and
+  // `claude-3-haiku` (input 0.25) inherited the same 0.3 — pricing a CACHE READ at 1.2x FRESH
+  // INPUT, which no provider charges and no configuration intends. It also silenced the protective
+  // `input * 0.10` fallback in cost-compute.ts, which only fires when the field is undefined; the
+  // inherited absolute value made it defined and wrong.
+  //
+  // Both directions of the ratio matter and both were broken: cache READS are a discount off input
+  // (~0.10x) and cache WRITES a premium over it (Anthropic's 1.25x, encoded on the `claude` parent
+  // as 3.75 against base 3). Scaling by input preserves whichever ratio the parent expressed.
+  //
+  // Only applies when the child overrode input and stated NO rate of its own — an explicit
+  // `cachedRead` (e.g. glm-4.7's 0.11) is a deliberate figure and is never rescaled.
+  if (parent?.inputCostPerMTok !== undefined && entry.input !== undefined && entry.input > 0) {
+    const scale = entry.input / parent.inputCostPerMTok;
+    if (entry.cachedRead === undefined && parent.cachedReadCostPerMTok !== undefined) {
+      result.cachedReadCostPerMTok = parent.cachedReadCostPerMTok * scale;
+    }
+    if (entry.cachedNonRead === undefined && parent.cachedNonReadCostPerMTok !== undefined) {
+      result.cachedNonReadCostPerMTok = parent.cachedNonReadCostPerMTok * scale;
+    }
+  }
 
   return result;
 }

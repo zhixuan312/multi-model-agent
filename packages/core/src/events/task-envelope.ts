@@ -11,12 +11,24 @@ import type { FindingsOutcome } from '../types/enums.js';
 
 export interface StructuredError { code: string; message: string; where?: string }
 export interface Finding { id: string; severity: 'critical'|'high'|'medium'|'low'; category: string; claim: string; evidence: string; suggestion?: string; source: 'implementer'|'reviewer' }
-export interface EscalationEntry { fromModel: string; toModel: string; reason: string; atStage?: string }
 export interface ValidationWarning { rule: string; path: string }
 
 export type Route = 'delegate' | 'audit' | 'review' | 'debug' | 'investigate' | 'execute-plan' | 'research' | 'journal-record' | 'journal-recall' | 'orchestrate' | 'spec' | 'plan';
 export type EnvelopeStatus = 'running' | 'done' | 'done_with_concerns' | 'failed';
-export type StageName = 'implementing' | 'reviewing' | 'reworking' | 'annotating' | 'committing';
+/**
+ * The two stages the pipeline runs.
+ *
+ * `reworking`, `annotating` and `committing` were also declared here, and nothing has produced
+ * any of them since the lifecycle layer was deleted — `telemetry-snapshot.ts` builds exactly
+ * `implementing` and (when a reviewer ran) `reviewing`. Their only producer was a test fixture,
+ * which is what kept their wire-projection branches looking covered.
+ *
+ * `wire-schema.ts`'s `StageNameEnum` still ACCEPTS all five: it is the contract with the
+ * telemetry backend in a separate repo, and narrowing it is a two-repo change. A producer that
+ * can only emit two of five permitted values is not a defect; a producer with branches for three
+ * it can never emit is.
+ */
+export type StageName = 'implementing' | 'reviewing';
 export type AgentTier = 'standard' | 'complex' | 'main';
 
 export interface StageRecord {
@@ -35,23 +47,25 @@ export interface StageRecord {
   outputTokens: number;
   cachedReadTokens: number | null;
   cachedNonReadTokens: number | null;
-  // route-specific (closed set per spec)
-  filesCommittedCount?: number;
-  branchCreated?: boolean;
-  skipReason?: 'noop' | 'no_command' | 'not_applicable' | 'reviewPolicy_none';
+  // route-specific (closed set per spec). `filesCommittedCount`, `branchCreated` and
+  // `skipReason` lived here for the committing/annotating stages and went with them — the
+  // engine creates no branch (the caller owns it) and commits outside any stage.
   // Stage verdicts:
   //   review stage → 'approved' | 'changes_required' | 'error' (combined verdict
   //     of spec + quality sub-reviewers; matches wire enum, see wire-schema.ts).
-  //   committing / verify stages → 'passed' | 'failed' | 'no_command' | 'annotated'
-  //   annotating stage → tracked separately via `outcome` not `verdict`
-  verdict?: 'passed' | 'failed' | 'no_command' | 'annotated' | 'approved' | 'changes_required' | 'concerns' | 'error';
+  verdict?: 'approved' | 'changes_required' | 'concerns' | 'error';
   findingsBySeverity?: { critical: number; high: number; medium: number; low: number };
+  /** The reviewer's OWN category words, free text.
+   *
+   *  These were validated against a closed 14-value `ConcernCategory` enum. The
+   *  refiner schemas type `category` as a plain string, so every reviewer word
+   *  outside the 14 — `flaky_test`, `race_condition` — collapsed to `other`,
+   *  discarding the signal precisely where it got specific. The store keeps the
+   *  reviewer's word and the dashboard groups on it. */
   concernCategories?: string[];
   // Findings outcome threading (review + implementing stages)
   findingsOutcome?: FindingsOutcome | null;
   findingsOutcomeReason?: string | null;
-  outcomeInferred?: boolean;
-  outcomeMalformed?: boolean;
 }
 
 export interface ToolCallRecord {
@@ -61,19 +75,6 @@ export interface ToolCallRecord {
   turn: number;
   tool: string;
   filesWritten: string[];
-}
-
-export interface HeadlineSnapshot {
-  prefix: string;
-  stageLabel: string;
-  // 1-based ordinal of the stage named by stageLabel — i.e. how many visible
-  // stages have *started* (the running one counts). Mirrors the heartbeat's
-  // visibleRan, so `[stageIndex/stageTotal] stageLabel` reads as "stage N of
-  // M, currently <label>". Not a count of completed stages.
-  stageIndex: number;
-  stageTotal: number;
-  toolWrites: number;
-  toolTotal: number;
 }
 
 export interface TaskEnvelope {
@@ -94,7 +95,6 @@ export interface TaskEnvelope {
   structuredError: StructuredError | null;
   errorCode: ErrorCode | null;
   reviewPolicy: 'reviewed' | 'none';
-  plannedStageTotal: number;
   // accumulated
   stages: StageRecord[];
   toolCalls: ToolCallRecord[];
@@ -117,17 +117,37 @@ export interface TaskEnvelope {
   totalCachedNonReadTokens: number;
   totalDurationMs: number;
   turnsUsed: number;
-  stallCount: number;
-  sandboxViolationCount: number;
-  taskMaxIdleMs: number;
+  /** Tool calls the sandbox refused across every stage — a worker repeatedly
+   *  reaching outside its workspace.
+   *
+   *  Null when no stage could measure it (see TurnResult.sandboxDenialCount:
+   *  codex confines writes in the OS, where mma cannot observe a refusal).
+   *  `stallCount` and `taskMaxIdleMs` sat beside this reporting a hardcoded 0
+   *  each — the lifecycle layer's activity tracker measured them and went with
+   *  it, so nothing has produced a nonzero one since 4.8.0. */
+  sandboxViolationCount: number | null;
+  /** The caller cancelled this run (DELETE /task/:id won the race).
+   *
+   *  Distinct from any failure code: a cancel arrives as a `failed` pipeline
+   *  with an `aborted` turn, which is indistinguishable from the engine giving
+   *  up unless the caller's intent is recorded separately. Wire schema v6 had no
+   *  cancelled state at all, so every abort was billed as an engine error. */
+  wasCancelled: boolean;
   // findings/diagnostics
   findings: Finding[];
   // research-only: the `## Sources used` table (which adapter groups were
   // queried and which returned data), set at compose from the EvidencePack.
   // Empty on every non-research route.
   sourcesUsed: { source: string; attempted: boolean; used: boolean; note?: string }[];
-  escalationLog: EscalationEntry[];
   validationWarnings: ValidationWarning[];
-  // derived
-  headline: HeadlineSnapshot;
 }
+
+// A `HeadlineSnapshot` used to hang off this envelope as a "derived" field. Nothing derived it:
+// the sole producer wrote the literal `{ prefix: '', stageLabel: 'done', stageIndex: n,
+// stageTotal: n, toolWrites: 0, toolTotal: 0 }`, and no consumer read it — the envelope's only
+// production consumers are `toWireRecord` (which never referenced it) and `LogWriter`, which
+// serialises the whole object to the diagnostics JSONL. So its one effect was to write
+// `toolWrites: 0, toolTotal: 0` into every log line, next to that same envelope's populated
+// `toolCalls` array. Its docstring described mirroring "the heartbeat's visibleRan", a mechanism
+// retired with the lifecycle layer. The running progress headline is a different, live thing —
+// a string, computed in `application/headline-from-events.ts` for poll responses.
