@@ -5,6 +5,40 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [6.10.1] - 2026-08-16
+
+Three defects let a failed execution report success. If you have automation that reads terminal
+status, read the first bullet — outcomes that previously arrived as `done_with_concerns` or
+`completed` now correctly arrive as `failed`. `SCHEMA_VERSION` is unchanged at 7.
+
+### Fixed
+
+- **A provider outage was delivered to the caller as a successful answer.** When a tier's endpoint
+  refuses the connection, the Claude SDK still emits a `result` event with `subtype: 'success'`,
+  carrying the connection error as its result text and billing zero tokens. The runner trusted that
+  subtype, so the task terminated `done_with_concerns` with `error: null` and an
+  `output.summary` reading `"API Error: Unable to connect to API (ConnectionRefused)"` — and the
+  reviewer then ran on that non-answer. A claimed success that billed **no tokens** is now rejected
+  as `sdk_no_work_billed` and terminates `failed` before the reviewer starts. The check is keyed on
+  billing, never on error wording.
+- **A codex worker killed by a signal reported a successful turn.** A process killed by a signal
+  reports `exitCode: null` with `signalCode` set, so the exit-code-only check read `null`, skipped,
+  and left the turn marked `ok` — a SIGKILLed worker reached the caller as a completed task. Signal
+  death is now a failure (`signal_SIGKILL`), and the signal leads the error message instead of
+  trailing stderr noise.
+- **A Task that failed once could never be retried.** The frozen FR-9 transition matrix routes a
+  failed Execution's Task to `blocked` specifically to leave it "open for a human or a retried
+  Execution to resolve", but linked-execution admission accepted only `open` and `claimed`. The one
+  status a failure could produce was the one status admission refused. `blocked` is now admitted.
+
+### Changed
+
+- The full-smoke gate holds every execution to the invariant these three defects broke: a `failed`
+  envelope must carry an error code, and a success must carry no error and must have billed tokens.
+  A new record-surface scenario asserts an exported Initiative snapshot carries every Workspace its
+  own Tasks reference — the previous portability check compared entity counts, and a count of
+  `0 -> 0` cannot distinguish "nothing to carry" from "carried nothing".
+
 ## [6.10.0] - 2026-08-16
 
 ### Fixed
