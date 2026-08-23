@@ -5,6 +5,33 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [6.10.2] - 2026-08-23
+
+A deck that filled its slides silently lost content when printed, and nothing in the pipeline
+could tell you. If you have printed or PDF-exported a deck built with `/mma:deck`, print it
+again and compare. `SCHEMA_VERSION` is unchanged at 7.
+
+### Fixed
+
+- **Printing re-laid-out every slide at a smaller canvas, clipping whatever no longer fitted.**
+  On screen each slide is laid out in a fixed 1440x810 box and the stage is scaled to the window.
+  The print stylesheet instead re-laid-out at 13.333in x 7.5in — 1280x720 css px, 11% narrower
+  and 11% shorter — so every line re-wrapped and anything past the edge was clipped away by the
+  slide's own `overflow`. Clipped text never reaches the PDF at all, so it does not appear as
+  content spilling off the page; it simply is not there. It failed as quietly as a bug can: the
+  deck's own self-check measures the 810px stage and passes, and the browser's print preview looks
+  plausible. Found on a real deck whose cover page printed holding nothing but its agenda and its
+  footer. Both dimensions share one ratio (1280/1440 = 720/810 = 8/9), so print now does what the
+  screen does — keeps the 1440x810 layout and scales it uniformly. Type stays vector. The
+  guidebook shipped inside the template is its own regression test: printed before and after, no
+  page lost text and page 53 gained 262 characters it had been quietly dropping.
+
+### Changed
+
+- **`/mma:deck` Phase 5 now says to check the printed PDF, not the print preview**, for any deck
+  that will be printed or sent as a file, with the one command that catches a page that lost its
+  content.
+
 ## [6.10.1] - 2026-08-16
 
 Three defects let a failed execution report success. If you have automation that reads terminal
