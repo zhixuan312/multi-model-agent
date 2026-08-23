@@ -250,6 +250,14 @@ Then the structural checks:
 - body text is at or above the reading floor — nothing below `--fs-small`
 - each slide has exactly one dominant composition, and no slide is a bare bullet list
 - the JSON manifest lists exactly the sections present
+- **if the deck will be printed or sent as a PDF, check the PDF, not the preview.**
+  Print lays each slide out afresh; a slide authored to fill the 810px stage can
+  lose whatever no longer fits, and it fails silently — the checks above measure
+  the on-screen stage and pass. Read the printed text back and compare:
+
+      pdftotext -f <n> -l <n> deck.pdf - | tr -d '[:space:]' | wc -c
+
+  A page far thinner than its neighbours lost content.
 
 State what passed and what did not. **Never report a deck as clean without having checked**
 — a deck that renders but breaks the contract is the failure this command is built to

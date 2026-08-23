@@ -255,7 +255,19 @@ tbody tr:first-child td{border-top:0}tbody tr:nth-child(even) td{background:rgba
   html,body{width:auto;height:auto;overflow:visible;background:#fff}
   #viewport{position:static;overflow:visible}
   #stage{position:static;width:13.333in;height:auto;transform:none!important;box-shadow:none}
-  .slide{position:relative;width:13.333in;height:7.5in;opacity:1;visibility:visible;pointer-events:auto;page-break-after:always;break-after:page}
+  .slide{position:relative;width:13.333in;height:7.5in;opacity:1;visibility:visible;pointer-events:auto;page-break-after:always;break-after:page;overflow:hidden}
+  /* PRINT THE SCREEN CANVAS, DO NOT RE-LAY-OUT AT A SMALLER ONE.
+     On screen every slide is laid out in a fixed 1440x810 box and #stage is
+     scaled to the window. 13.333in x 7.5in is 1280x720 css px — 11% narrower
+     and 11% shorter — so without this rule print re-flows every line, and any
+     slide authored to fill the 810px stage (which the composition rules ask
+     for) silently loses whatever no longer fits. It fails quietly: the on-page
+     self-check measures the 810px stage and passes, the print PREVIEW looks
+     plausible, and the loss only shows up if you read the PDF's text layer.
+     Both dimensions share one ratio (1280/1440 = 720/810 = 8/9), so scaling the
+     real canvas is exact, and the type stays vector. */
+  .slide>.sheet{width:1440px!important;height:810px!important;
+                transform:scale(.8888889)!important;transform-origin:top left!important}
   .slide:last-of-type{page-break-after:auto;break-after:auto}
   .dock,.manual,.progress{display:none!important}
   .reveal{opacity:1!important;transform:none!important;animation:none!important}
