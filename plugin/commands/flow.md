@@ -17,6 +17,16 @@ nothing: Stage 0 LOCATE picks up from the durable artifacts on disk. A braindump
 already on disk resumes that flow; a braindump naming NEW work starts a fresh flow even when
 unrelated artifacts exist (see Stage 0 — LOCATE).
 
+**How it is invoked.** `disable-model-invocation: true` in the frontmatter is what makes
+"invoked explicitly" literal rather than aspirational: the agent cannot start this flow on the
+user's behalf — not through the Skill tool, and not by hand-rolling the stages instead. It runs
+only from a message whose **opening token** is the command. Everything after it on that line is
+the braindump argument, so `/mma:flow <raw idea>` is the normal D1 entry; the command written
+mid-sentence is plain text and fires nothing, which is the one way this reliably surprises
+people. Headless cron is unaffected: a scheduled or looped job delivers its prompt as a user
+turn, so a job whose prompt IS `/mma:flow …` — or bare `/mma:flow` — expands exactly as a typed
+one does.
+
 The flow delivers ONE approved Deliverable Contract through ONE `disposition` — `pr`,
 `commit-in-place`, or `deliver-file` — declared on the contract and never inferred from
 git-ness. A solution needing two different delivery modes runs as two flows (one contract, one
