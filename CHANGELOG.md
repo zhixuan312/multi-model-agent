@@ -5,6 +5,24 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [6.10.3] - 2026-08-29
+
+`/mma:flow` fires only when it is the first token of your message. That rule was written down
+nowhere, so a session that wrote it mid-sentence got nothing and had no way to find out why.
+Documentation only — no behavior changed. `SCHEMA_VERSION` is unchanged at 7.
+
+### Changed
+
+- **`mma-flow` now documents how it is invoked**, which the skill previously left to the reader.
+  Claude Code resolves a slash command only when it opens the message; written mid-sentence it is
+  plain text and fires nothing. Everything after the command on that line is the braindump
+  argument, so `/mma:flow <raw idea>` is the normal entry into D1 — the rule is *first* token, not
+  *only* token. The skill also now states outright that `disable-model-invocation: true` means the
+  agent cannot start the flow on your behalf, through the Skill tool or by hand-rolling the stages,
+  and that headless cron is unaffected regardless: a scheduled or looped job delivers its prompt as
+  a user turn, so a job whose prompt IS the command expands exactly as a typed one does. The
+  generated marketplace copy at `plugin/commands/flow.md` carries the same text.
+
 ## [6.10.2] - 2026-08-23
 
 A deck that filled its slides silently lost content when printed, and nothing in the pipeline
