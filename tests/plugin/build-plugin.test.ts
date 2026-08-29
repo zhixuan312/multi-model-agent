@@ -254,18 +254,35 @@ describe('marketplace catalog', () => {
    * Checked here so it fails in the suite instead.
    */
   /**
-   * The marketplace blurb counts the rosters, and nothing regenerated or checked it.
+   * Every prose claim about the roster sizes counts the real rosters.
    *
    * `marketplace.json` is the one plugin file no gate touches: `build:plugin` does not write it,
    * and the drift guard diffs `plugin/`, which excludes it. It advertised "16 skills" after
    * `mma-solution-lead` made 17 — the storefront description undercounting the product by one.
+   *
+   * `README.md` makes the SAME claim, twice, and kept saying 16 for three releases after
+   * marketplace.json was corrected, because the guard written for that incident named one file.
+   * So this sweeps every file that states a count, and it matches EVERY occurrence rather than
+   * asserting the right number appears somewhere: a `toContain` passes on a file that fixed one
+   * of its two claims and left the other stale, which is one keystroke from what happened.
    */
-  it('the marketplace description counts the real rosters', () => {
-    const catalog = readFileSync(resolve(REPO_ROOT, '.claude-plugin', 'marketplace.json'), 'utf8');
-    expect(catalog, `marketplace.json should say ${SUPPORTED_SKILLS.length} skills`)
-      .toContain(`${SUPPORTED_SKILLS.length} skills`);
-    expect(catalog, `marketplace.json should say ${SUPPORTED_COMMANDS.length} commands`)
-      .toContain(`${SUPPORTED_COMMANDS.length} commands`);
+  it('every documented roster count matches the real rosters', () => {
+    const expected: Record<string, number> = {
+      skills: SUPPORTED_SKILLS.length,
+      commands: SUPPORTED_COMMANDS.length,
+    };
+    const claims = ['.claude-plugin/marketplace.json', 'README.md'].flatMap((file) => {
+      const text = readFileSync(resolve(REPO_ROOT, file), 'utf8');
+      return text.split('\n').flatMap((line, i) =>
+        [...line.matchAll(/(\d+) (skills|commands)/g)].map((m) => ({
+          where: `${file}:${i + 1}`, claimed: Number(m[1]), roster: m[2]!,
+        })));
+    });
+    expect(claims.length, 'no roster count found — did the prose stop stating one?')
+      .toBeGreaterThan(0);
+    for (const { where, claimed, roster } of claims) {
+      expect(claimed, `${where} says ${claimed} ${roster}`).toBe(expected[roster]);
+    }
   });
 
   it('the committed plugin manifest is at the repo version', () => {
